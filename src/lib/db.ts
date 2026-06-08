@@ -3,8 +3,7 @@
 
 import { supabaseServer } from './supabase'
 import {
-  MOCK_TIPSTERS, MOCK_TIPS, MOCK_SUBS,
-  getTipsterBySlug, getTipsForTipster, getSubsForPhone
+  MOCK_TIPSTERS,
 } from './mockData'
 import type { TipsterPublic, Tip, Subscription } from '@/types'
 
@@ -24,7 +23,7 @@ export async function getAllTipsters(): Promise<TipsterPublic[]> {
 
 export async function getTipsterByIdentifier(slug: string): Promise<TipsterPublic | null> {
   const db = supabaseServer()
-  if (!db) return getTipsterBySlug(slug) ?? null
+  if (!db) return null
 
   const { data } = await db
     .from('tipster_rankings')
@@ -38,7 +37,7 @@ export async function getTipsterByIdentifier(slug: string): Promise<TipsterPubli
 // ── TIPS ─────────────────────────────────────────────────────────
 export async function getTipsByTipster(tipsterId: string): Promise<Tip[]> {
   const db = supabaseServer()
-  if (!db) return getTipsForTipster(tipsterId)
+  if (!db) return []
 
   const { data } = await db
     .from('tips')
@@ -69,7 +68,7 @@ export async function createTip(tip: Omit<Tip, 'id' | 'created_at' | 'result'>):
 // ── SUBSCRIPTIONS ────────────────────────────────────────────────
 export async function getSubscriptionsByPhone(phone: string) {
   const db = supabaseServer()
-  if (!db) return getSubsForPhone(phone)
+  if (!db) return []
 
   const { data } = await db
     .from('subscriptions')
@@ -87,11 +86,7 @@ export async function checkActiveSubscription(
 ): Promise<boolean> {
   const db = supabaseServer()
   if (!db) {
-    return MOCK_SUBS.some(
-      s => s.user_phone === userPhone &&
-           s.tipster_id === tipsterId &&
-           s.status === 'active'
-    )
+    return false
   }
 
   const { data } = await db
