@@ -23,10 +23,30 @@ export async function POST(req: NextRequest) {
   const db = supabaseServer()
   if (!db) return NextResponse.json({ error: 'Database not connected' }, { status: 500 })
   const normPhone = normalisePhone(phone)
-  const { data: existing } = await db.from('tipsters').select('id').eq('phone', normPhone).single()
+  const { data: existing } = await db
+    .from('tipsters')
+    .select('id')
+    .eq('phone', normPhone)
+    .maybeSingle()
+
   if (existing) return NextResponse.json({ error: 'Phone number already registered' }, { status: 409 })
-  const { data: tipster, error } = await db.from('tipsters').insert({ name, username: slugify(name), phone: normPhone, password_hash: hashPassword(password), sport: sport ?? '', description: description ?? '', verified: false }).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const { data: tipster, error } = await db
+    .from('tipsters')
+    .insert({
+      name,
+      username: slugify(name),
+      phone:    normPhone,
+      password_hash: hashPassword(password),
+      sport:       sport       ?? '',
+      description: description ?? '',
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Tipster insert error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ success: true, tipster: { id: tipster.id, name: tipster.name, username: tipster.username, phone: normPhone, password } })
 }
 
