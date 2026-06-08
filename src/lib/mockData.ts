@@ -1,6 +1,7 @@
 // ── mockData.ts ───────────────────────────────────────────────────
 // This file provides fallback data for local development only.
 // In production, all data comes from Supabase via the API routes.
+// The MOCK_ exports are only used when Supabase is not connected.
 
 import type { TipsterPublic } from '@/types'
 import type { Betslip } from '@/types/betslip'

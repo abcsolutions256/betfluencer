@@ -21,3 +21,9 @@ export function isValidAdminToken(token: string): boolean {
     return decoded.startsWith('admin:')
   } catch { return false }
 }
+
+// ── Verify admin token from request header ────────────────────────
+export function verifyAdminToken(req: Request): boolean {
+  const token = (req.headers as any).get?.('x-admin-token') ?? ''
+  return isValidAdminToken(token)
+}

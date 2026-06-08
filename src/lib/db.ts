@@ -4,6 +4,7 @@
 import { supabaseServer } from './supabase'
 import {
   MOCK_TIPSTERS,
+  getTipsterBySlug
 } from './mockData'
 import type { TipsterPublic, Tip, Subscription } from '@/types'
 
@@ -86,7 +87,7 @@ export async function checkActiveSubscription(
 ): Promise<boolean> {
   const db = supabaseServer()
   if (!db) {
-    return false
+    return false // no mock subs in production
   }
 
   const { data } = await db

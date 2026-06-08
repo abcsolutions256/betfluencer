@@ -284,6 +284,164 @@ function PostAdForm({ onDone }: { onDone: () => void }) {
   )
 }
 
+// ── TIPSTERS TAB ──────────────────────────────────────────────────
+function TipstersTab({ token }: { token: string }) {
+  const [tipsters,     setTipsters]     = useState<any[]>([])
+  const [signupsOpen,  setSignupsOpen]  = useState(false)
+  const [showCreate,   setShowCreate]   = useState(false)
+  const [newTipster,   setNewTipster]   = useState<any>(null)
+  const [loading,      setLoading]      = useState(false)
+  const [toggling,     setToggling]     = useState(false)
+  const [copied,       setCopied]       = useState(false)
+  const [form, setForm] = useState({ name: '', phone: '', password: '', sport: '', description: '' })
+
+  useEffect(() => {
+    fetch('/api/admin/settings').then(r => r.json()).then(d => setSignupsOpen(d.publicSignupsEnabled ?? false))
+    fetch('/api/admin/tipsters', { headers: { 'x-admin-token': token } }).then(r => r.json()).then(d => setTipsters(d.tipsters ?? []))
+  }, [token])
+
+  async function toggleSignups() {
+    setToggling(true)
+    const res = await fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify({ publicSignupsEnabled: !signupsOpen }) })
+    const d = await res.json()
+    setSignupsOpen(d.settings?.publicSignupsEnabled ?? !signupsOpen)
+    setToggling(false)
+  }
+
+  async function createTipster() {
+    if (!form.name || !form.phone || !form.password) return
+    setLoading(true)
+    const res  = await fetch('/api/admin/tipsters', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify(form) })
+    const data = await res.json()
+    setLoading(false)
+    if (data.success) {
+      setNewTipster(data.tipster)
+      setTipsters(prev => [data.tipster, ...prev])
+      setForm({ name: '', phone: '', password: '', sport: '', description: '' })
+      setShowCreate(false)
+    }
+  }
+
+  async function toggleVerified(id: string, verified: boolean) {
+    await fetch('/api/admin/tipsters', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify({ id, verified: !verified }) })
+    setTipsters(prev => prev.map(t => t.id === id ? { ...t, verified: !verified } : t))
+  }
+
+  async function deleteTipster(id: string) {
+    if (!confirm('Remove this tipster?')) return
+    await fetch('/api/admin/tipsters', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify({ id }) })
+    setTipsters(prev => prev.filter(t => t.id !== id))
+  }
+
+  function copyCredentials(t: any) {
+    const text = `Betfluencer tipster login\nPhone: ${t.phone}\nPassword: ${t.password}\nLogin at: https://betfluencer.org/tipster/login`
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <>
+      {/* Public signups toggle */}
+      <div className="card" style={{ borderLeft: `3px solid ${signupsOpen ? 'var(--green)' : 'var(--gold)'}`, marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)', marginBottom: 2 }}>Public signups</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>{signupsOpen ? 'Anyone can sign up as a tipster' : 'Only admin can create tipster accounts'}</div>
+          </div>
+          <button onClick={toggleSignups} disabled={toggling} style={{ fontSize: 11, fontWeight: 800, padding: '7px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', background: signupsOpen ? 'var(--red-lt)' : 'var(--green-lt)', color: signupsOpen ? 'var(--red)' : 'var(--green)' }}>
+            {toggling ? '...' : signupsOpen ? 'Close signups' : 'Open signups'}
+          </button>
+        </div>
+      </div>
+
+      {/* New tipster credentials */}
+      {newTipster && (
+        <div className="card" style={{ borderLeft: '3px solid var(--green)', marginBottom: 14, background: 'rgba(46,204,122,0.05)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', marginBottom: 8 }}>✓ Tipster created — share these credentials</div>
+          <div style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--offwhite)', lineHeight: 2, background: 'var(--bg3)', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
+            <div><span style={{ color: 'var(--muted)' }}>Name:</span> {newTipster.name}</div>
+            <div><span style={{ color: 'var(--muted)' }}>Phone:</span> {newTipster.phone}</div>
+            <div><span style={{ color: 'var(--muted)' }}>Password:</span> {newTipster.password}</div>
+            <div><span style={{ color: 'var(--muted)' }}>URL:</span> betfluencer.org/tipster/login</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <button onClick={() => copyCredentials(newTipster)} style={{ padding: '8px', background: copied ? 'var(--green)' : 'var(--bg3)', color: copied ? '#fff' : 'var(--offwhite)', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              {copied ? 'Copied ✓' : 'Copy credentials'}
+            </button>
+            <button onClick={() => setNewTipster(null)} style={{ padding: '8px', background: 'var(--bg3)', color: 'var(--muted)', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Create tipster button */}
+      {!showCreate ? (
+        <button onClick={() => setShowCreate(true)} style={{ width: '100%', padding: '11px', background: 'var(--green-lt)', color: 'var(--green)', border: '1px dashed rgba(46,204,122,0.4)', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 14 }}>
+          + Create tipster account
+        </button>
+      ) : (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)' }}>New tipster</div>
+            <button onClick={() => setShowCreate(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 13 }}>✕</button>
+          </div>
+          <label className="lbl">Full name *</label>
+          <input className="inp" placeholder="e.g. John Mugisha" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={{ marginBottom: 8 }} />
+          <label className="lbl">Phone number *</label>
+          <input className="inp" placeholder="e.g. 0771234567" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} style={{ marginBottom: 8 }} />
+          <label className="lbl">Password *</label>
+          <input className="inp" placeholder="They can change this later" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} style={{ marginBottom: 8 }} />
+          <label className="lbl">Sport / leagues</label>
+          <input className="inp" placeholder="e.g. Premier League, UPL" value={form.sport} onChange={e => setForm(f => ({ ...f, sport: e.target.value }))} style={{ marginBottom: 8 }} />
+          <label className="lbl">Bio (optional)</label>
+          <input className="inp" placeholder="Short description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ marginBottom: 12 }} />
+          <button onClick={createTipster} disabled={loading || !form.name || !form.phone || !form.password} style={{ width: '100%', padding: '10px', background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer', opacity: (!form.name || !form.phone || !form.password) ? 0.4 : 1 }}>
+            {loading ? 'Creating...' : 'Create account'}
+          </button>
+        </div>
+      )}
+
+      {/* Tipster list */}
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+        All tipsters ({tipsters.length})
+      </div>
+      {tipsters.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)', fontSize: 13 }}>No tipsters yet — create the first one above</div>
+      )}
+      {tipsters.map(t => (
+        <div key={t.id} className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--bg3)', color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+              {t.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+              <div style={{ fontSize: 10, color: 'var(--muted)' }}>@{t.username} · {t.phone}</div>
+              {t.sport && <div style={{ fontSize: 10, color: 'var(--muted)' }}>{t.sport}</div>}
+            </div>
+            <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: t.verified ? 'var(--green-lt)' : 'var(--bg3)', color: t.verified ? 'var(--green)' : 'var(--muted)', border: `1px solid ${t.verified ? 'rgba(46,204,122,0.3)' : 'var(--line)'}`, flexShrink: 0 }}>
+              {t.verified ? '✓ Verified' : 'Unverified'}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            <button onClick={() => toggleVerified(t.id, t.verified)} style={{ padding: '7px', background: t.verified ? 'var(--red-lt)' : 'var(--green-lt)', color: t.verified ? 'var(--red)' : 'var(--green)', border: 'none', borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+              {t.verified ? 'Remove tick' : 'Award tick'}
+            </button>
+            <button onClick={() => copyCredentials(t)} style={{ padding: '7px', background: 'var(--bg3)', color: 'var(--offwhite)', border: 'none', borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+              Copy login
+            </button>
+            <button onClick={() => deleteTipster(t.id)} style={{ padding: '7px', background: 'var(--red-lt)', color: 'var(--red)', border: 'none', borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
 // ── MAIN ADMIN PANEL ──────────────────────────────────────────────
 export default function AdminPage() {
   const [authed,   setAuthed]   = useState(false)
@@ -430,36 +588,7 @@ export default function AdminPage() {
 
         {/* ── TIPSTERS ── */}
         {tab === 'tipsters' && (
-          <>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>All tipsters ({MOCK_TIPSTERS.length})</div>
-            {MOCK_TIPSTERS.map(t => (
-              <div key={t.id} className="card">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--bg3)', color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>
-                    {t.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)', marginBottom: 1 }}>{t.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>@{t.username} · {t.sport}</div>
-                  </div>
-                  <span className={t.verified ? 'pill-green' : 'pill-muted'}>{t.verified ? '✓ Verified' : 'Unverified'}</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-                  <div className="sbox"><div style={{ fontSize: 13, fontWeight: 800, color: 'var(--green)' }}>{t.wins_last_10}/10</div><div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>wins</div></div>
-                  <div className="sbox"><div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)' }}>{t.subscriber_count.toLocaleString()}</div><div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>subs</div></div>
-                  <div className="sbox"><div style={{ fontSize: 13, fontWeight: 800, color: 'var(--gold)' }}>#{MOCK_TIPSTERS.indexOf(t) + 1}</div><div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>rank</div></div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-                  <button style={{ padding: '7px', background: t.verified ? 'var(--red-lt)' : 'var(--green-lt)', color: t.verified ? 'var(--red)' : 'var(--green)', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                    {t.verified ? 'Remove tick' : 'Award tick'}
-                  </button>
-                  <button style={{ padding: '7px', background: 'var(--red-lt)', color: 'var(--red)', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                    Suspend
-                  </button>
-                </div>
-              </div>
-            ))}
-          </>
+          <TipstersTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
         )}
 
         {/* ── REVIEW — unverifiable markets needing manual check ── */}
