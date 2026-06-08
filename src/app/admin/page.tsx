@@ -193,9 +193,12 @@ function TipstersTab({ token }: { token: string }) {
     setToggling(false)
   }
 
+  const [createError, setCreateError] = useState('')
+
   async function createTipster() {
     if (!form.name || !form.phone || !form.password) return
     setLoading(true)
+    setCreateError('')
     const res  = await fetch('/api/admin/tipsters', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify(form) })
     const data = await res.json()
     setLoading(false)
@@ -204,6 +207,8 @@ function TipstersTab({ token }: { token: string }) {
       setTipsters(prev => [data.tipster, ...prev])
       setForm({ name: '', phone: '', password: '', sport: '', description: '' })
       setShowCreate(false)
+    } else {
+      setCreateError(data.error ?? 'Failed to create account')
     }
   }
 
@@ -282,6 +287,7 @@ function TipstersTab({ token }: { token: string }) {
           <input className="inp" placeholder="e.g. Premier League, UPL" value={form.sport} onChange={e => setForm(f => ({ ...f, sport: e.target.value }))} style={{ marginBottom: 8 }} />
           <label className="lbl">Bio (optional)</label>
           <input className="inp" placeholder="Short description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ marginBottom: 12 }} />
+          {createError && <div style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, marginBottom: 10, background: 'var(--red-lt)', padding: '8px 10px', borderRadius: 8 }}>{createError}</div>}
           <button onClick={createTipster} disabled={loading || !form.name || !form.phone || !form.password} style={{ width: '100%', padding: '10px', background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer', opacity: (!form.name || !form.phone || !form.password) ? 0.4 : 1 }}>
             {loading ? 'Creating...' : 'Create account'}
           </button>
