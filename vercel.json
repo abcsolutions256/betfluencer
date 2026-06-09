@@ -3,6 +3,7 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
+  "regions": ["bom1"],
   "crons": [
     {
       "path": "/api/verify",
