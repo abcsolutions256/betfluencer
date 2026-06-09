@@ -1,39 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createTip, getTipsByTipster } from '@/lib/db'
-import { sendSMS, smsTemplates } from '@/lib/payments'
-import { getSubscriptionsByPhone } from '@/lib/db'
-import { z } from 'zod'
-
-const schema = z.object({
-  tipster_id: z.string(),
-  match:      z.string().min(3),
-  pick:       z.string().min(2),
-  odds:       z.number().min(1),
-  league:     z.string().optional(),
-  match_time: z.string().optional(),
-})
+import { supabaseServer } from '@/lib/supabase'
 
 export async function POST(req: NextRequest) {
-  const body   = await req.json()
-  const parsed = schema.safeParse(body)
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
-
-  const tip = await createTip({
-    tipster_id: parsed.data.tipster_id,
-    match:      parsed.data.match,
-    pick:       parsed.data.pick,
-    odds:       parsed.data.odds,
-    match_time: parsed.data.match_time ?? new Date().toISOString(),
-  })
-
-  if (!tip) return NextResponse.json({ error: 'Could not post tip' }, { status: 500 })
-
-  // Notify subscribers — get all active subs for this tipster
-  // In production this should be a background job, not blocking
   try {
-    const allSubs = await getSubscriptionsByPhone('') // placeholder
-    // TODO: query subscriptions by tipster_id, send SMS to each
-  } catch (_) {}
+    const body = await req.json()
+    const { slips, tipster_id } = body
 
-  return NextResponse.json({ tip })
+    if (!tipster_id || !slips?.length)
+      return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
+
+    const db = supabaseServer()
+    const inserted = []
+
+    for (const slip of slips) {
+      const isBookingCode = !!slip.booking_code
+      
+      const { data, error } = await db
+        .from('betslips')
+        .insert({
+          tipster_id,
+          posting_mode:  isBookingCode ? 'booking_code' : 'manual',
+          booking_code:  slip.booking_code  ?? null,
+          betting_site:  slip.betting_site  ?? null,
+          total_odds:    slip.total_odds    ? parseFloat(slip.total_odds) : null,
+          leg_count:     slip.legs?.length  ?? slip.leg_count ?? null,
+          slip_price:    slip.slip_price    ?? 1000,
+          note:          slip.note          ?? '',
+          result:        'pending',
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Slip insert error:', error)
+        return NextResponse.json({ error: 'Could not save slip: ' + error.message }, { status: 500 })
+      }
+
+      inserted.push(data)
+    }
+
+    return NextResponse.json({ status: 'success', result: inserted.length, tip: inserted[0] })
+  } catch (e: any) {
+    console.error('Post tip error:', e)
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
 }
