@@ -7,7 +7,6 @@ import { Avatar, VerifiedTick } from '@/components/ui'
 import { BetslipFeed } from '@/components/ui/BetslipFeed'
 import { WinRateBadge } from '@/components/ui/WinHistory'
 import { FollowButton } from '@/components/ui/FollowButton'
-import { MOCK_BETSLIPS, getTipsterBySlug } from '@/lib/mockData'
 import type { TipsterPublic } from '@/types'
 import type { Betslip } from '@/types/betslip'
 
@@ -17,13 +16,23 @@ export default function ChannelPage() {
   const [tipster, setTipster] = useState<TipsterPublic | null>(null)
   const [slips,   setSlips]   = useState<Betslip[]>([])
   const [tab,     setTab]     = useState<'slips' | 'about'>('slips')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const t = getTipsterBySlug(slug)
-    if (t) { setTipster(t); setSlips(MOCK_BETSLIPS[t.id] ?? []) }
+    if (!slug) return
+    // Fetch tipster profile
+    fetch(`/api/tipster/${slug}`)
+      .then(r => r.json())
+      .then(d => { if (d.tipster) setTipster(d.tipster) })
+
+    // Fetch their betslips
+    fetch(`/api/tipster/${slug}/slips`)
+      .then(r => r.json())
+      .then(d => { if (d.slips) setSlips(d.slips) })
+      .finally(() => setLoading(false))
   }, [slug])
 
-  if (!tipster) return (
+  if (loading || !tipster) return (
     <div className="flex items-center justify-center min-h-screen">
       <Loader2 size={32} color="var(--gold)" className="spin" />
     </div>
@@ -44,16 +53,14 @@ export default function ChannelPage() {
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>@{tipster.username} · {tipster.sport}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <WinRateBadge wins={tipster.wins_last_10} total={10} slips={slips} />
-              <span className="pill-muted">{tipster.subscriber_count.toLocaleString()} fans</span>
+              <WinRateBadge wins={tipster.wins_last_10 ?? 0} total={10} slips={slips} />
+              <span className="pill-muted">{(tipster.subscriber_count ?? 0).toLocaleString()} fans</span>
             </div>
           </div>
         </div>
 
-        {/* Follow button */}
         <FollowButton tipsterId={tipster.id} />
 
-        {/* Per-slip info */}
         <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: 12, padding: '10px 14px', marginTop: 10, fontSize: 12, color: 'var(--offwhite)', fontWeight: 500, lineHeight: 1.5 }}>
           ⚡ Pay per slip — buy only the tips you want. Finished slips are free to view.
         </div>
@@ -77,9 +84,9 @@ export default function ChannelPage() {
             {[
               { label: 'Username',       val: `@${tipster.username}` },
               { label: 'Covers',         val: tipster.sport },
-              { label: 'Wins (last 10)', val: `${tipster.wins_last_10}/10` },
-              { label: 'Avg odds',       val: `${tipster.avg_odds.toFixed(1)}x` },
-              { label: 'Fans',           val: tipster.subscriber_count.toLocaleString() },
+              { label: 'Wins (last 10)', val: `${tipster.wins_last_10 ?? 0}/10` },
+              { label: 'Avg odds',       val: `${(tipster.avg_odds ?? 0).toFixed(1)}x` },
+              { label: 'Fans',           val: (tipster.subscriber_count ?? 0).toLocaleString() },
             ].map((r, i) => (
               <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < 4 ? '1px solid var(--line)' : 'none' }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>{r.label}</span>
