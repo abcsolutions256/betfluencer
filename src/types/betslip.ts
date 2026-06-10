@@ -1,5 +1,5 @@
 export type SlipResult  = 'pending' | 'win' | 'loss'
-export type PostingMode = 'manual' | 'screenshot'
+export type PostingMode = { posting_mode: 'manual' | 'screenshot' | 'booking_code' }
 
 export interface SlipLeg {
   id:         string
