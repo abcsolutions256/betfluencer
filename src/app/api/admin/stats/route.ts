@@ -10,10 +10,10 @@ export async function GET(req: NextRequest) {
   const [{ count: tipsters }, { count: purchases }, { data: earnings }] = await Promise.all([
     db.from('tipsters').select('*', { count: 'exact', head: true }),
     db.from('slip_purchases').select('*', { count: 'exact', head: true }),
-    db.from('earnings').select('platform_cut').order('created_at', { ascending: false }).limit(100),
+    db.from('earnings').select('commission').order('created_at', { ascending: false }).limit(100),
   ])
 
-  const commission = (earnings ?? []).reduce((s: number, e: any) => s + (e.platform_cut ?? 0), 0)
+  const commission = (earnings ?? []).reduce((s: number, e: any) => s + (e.commission ?? 0), 0)
 
   const { data: recentPurchases } = await db
     .from('slip_purchases')
