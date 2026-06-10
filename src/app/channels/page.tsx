@@ -11,7 +11,7 @@ export default function ChannelsPage() {
   const [loading,  setLoading]  = useState(true)
 
   useEffect(() => {
-    fetch('/api/tipsters')
+    fetch('/api/tipster')
       .then(r => r.json())
       .then(data => {
         const list = data.tipsters ?? []

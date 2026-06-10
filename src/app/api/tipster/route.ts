@@ -12,4 +12,4 @@ export async function GET() {
   if (error) return NextResponse.json({ tipsters: [] })
 
   return NextResponse.json({ tipsters: tipsters ?? [] })
-}
+} 
