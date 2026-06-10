@@ -112,7 +112,7 @@ export default function TipsterDashboard() {
   }, [router])
 
   async function postTip() {
-   if (postMode === 'manual' && !slips.every(s => s.legs.every(l => l.match && l.pick && l.odds))) return
+  if (postMode === 'manual' && !slips.every(s => (s as any).booking_code || s.legs.every(l => l.match && l.pick && l.odds))) return
     setPosting(true)
     const res = await fetch('/api/tips', {
       method: 'POST',
