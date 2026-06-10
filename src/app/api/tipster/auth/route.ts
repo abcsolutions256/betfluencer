@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
     const phone   = normalisePhone(parsed.data.phone)
     const tipster = await getTipsterByPhone(phone)
 
+    
     if (!tipster) return NextResponse.json({ error: 'No account found for this number' }, { status: 401 })
 
     const valid = verifyPassword(parsed.data.password, tipster.password_hash ?? '')

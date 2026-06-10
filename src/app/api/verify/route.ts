@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
   const demoResults: any[] = []
   for (const [tipsterId, slips] of Object.entries(MOCK_BETSLIPS)) {
     for (const slip of slips) {
-      if (slip.result !== 'pending' || slip.posting_mode !== 'manual') continue
+      if (slip.result !== 'pending' || slip.posting_mode === 'screenshot') continue
       const legs = slip.legs ?? []
       const legResults = await verifySlip(legs)
       const slipResult = calcSlipResult(legResults.map(r => r.result))
