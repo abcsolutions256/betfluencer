@@ -66,13 +66,13 @@ export function TipsterCard({ tipster, rank }: { tipster: TipsterPublic; rank: n
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 mb-3">
-        <div className="sbox"><WinRate wins={tipster.wins_last_10} /></div>
+        <div className="sbox"><WinRate wins={tipster.wins_last_10 ?? 0} /></div>
         <div className="sbox">
-          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--gold)' }}>{tipster.avg_odds.toFixed(1)}x</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--gold)' }}>{(tipster.avg_odds ?? 0).toFixed(1)}x</div>
           <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3, fontWeight: 600 }}>avg odds</div>
         </div>
         <div className="sbox">
-          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--white)' }}>{tipster.subscriber_count.toLocaleString()}</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--white)' }}>{(tipster.subscriber_count ?? 0).toLocaleString()}</div>
           <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3, fontWeight: 600 }}>fans</div>
         </div>
       </div>
