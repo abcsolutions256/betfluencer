@@ -3,11 +3,24 @@ import { useState, useEffect } from 'react'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
 import { TipsterCard } from '@/components/ui'
 import { SearchBar, SearchEmpty } from '@/components/ui/SearchBar'
-import { MOCK_TIPSTERS } from '@/lib/mockData'
 import type { TipsterPublic } from '@/types'
 
 export default function ChannelsPage() {
-  const [results, setResults] = useState<TipsterPublic[]>(MOCK_TIPSTERS)
+  const [tipsters, setTipsters] = useState<TipsterPublic[]>([])
+  const [results,  setResults]  = useState<TipsterPublic[]>([])
+  const [loading,  setLoading]  = useState(true)
+
+  useEffect(() => {
+    fetch('/api/tipsters')
+      .then(r => r.json())
+      .then(data => {
+        const list = data.tipsters ?? []
+        setTipsters(list)
+        setResults(list)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -17,11 +30,17 @@ export default function ChannelsPage() {
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>TRENDING THIS WEEK</div>
           </div>
-          <SearchBar tipsters={MOCK_TIPSTERS} onResults={setResults} />
-          {results.length === 0
-            ? <SearchEmpty />
-            : results.map((t, i) => <TipsterCard key={t.id} tipster={t} rank={i + 1} />)
-          }
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>Loading tipsters...</div>
+          ) : (
+            <>
+              <SearchBar tipsters={tipsters} onResults={setResults} />
+              {results.length === 0
+                ? <SearchEmpty />
+                : results.map((t, i) => <TipsterCard key={t.id} tipster={t} rank={i + 1} />)
+              }
+            </>
+          )}
         </div>
       </main>
       <BottomNav />
