@@ -1,5 +1,5 @@
 export type SlipResult  = 'pending' | 'win' | 'loss'
-export type PostingMode = { posting_mode: 'manual' | 'screenshot' | 'booking_code' }
+export type PostingMode = 'manual' | 'screenshot' | 'booking_code'
 
 export interface SlipLeg {
   id:         string
@@ -9,25 +9,25 @@ export interface SlipLeg {
   odds:       number
   match_time: string
   result:     SlipResult
-  market?:    string   // market type for auto-verification
+  market?:    string
 }
 
 export interface Betslip {
-  id:               string
-  tipster_id:       string
-  posting_mode:     PostingMode
-  legs:             SlipLeg[]        // populated for manual mode
-  total_odds:       number
-  leg_count:        number           // for screenshot mode
-  result:           SlipResult
-  posted_at:        string
-  note?:            string
-  slip_price:       number
-  slip_image_url?:  string           // screenshot of the betslip
-  result_image_url?: string          // screenshot of result (win/loss proof)
-  result_proof_pending?: boolean     // screenshot mode, result not yet uploaded
-  booking_code?:    string           // booking code for code-based slips
-  betting_site?:    string           // which betting platform
+  id:                    string
+  tipster_id:            string
+  posting_mode:          PostingMode
+  legs:                  SlipLeg[]
+  total_odds:            number
+  leg_count:             number
+  result:                SlipResult
+  posted_at:             string
+  note?:                 string
+  slip_price:            number
+  slip_image_url?:       string
+  result_image_url?:     string
+  result_proof_pending?: boolean
+  booking_code?:         string
+  betting_site?:         string
 }
 
 export const ODDS_FILTERS = [
