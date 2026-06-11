@@ -26,14 +26,15 @@ export async function POST(req: NextRequest) {
         .from('betslips')
         .insert({
           tipster_id,
-          posting_mode: isBookingCode ? 'booking_code' : 'screenshot',
-          booking_code: slip.booking_code  || null,
-          betting_site: slip.betting_site  || null,
-          total_odds:   totalOdds,
-          leg_count:    legCount,
-          slip_price:   slip.slip_price    ?? 1000,
-          note:         slip.note          ?? '',
-          result:       'pending',
+          posting_mode:   slip.posting_mode ?? (isBookingCode ? 'booking_code' : 'screenshot'),
+          booking_code:   slip.booking_code  || null,
+          betting_site:   slip.betting_site  || null,
+          total_odds:     totalOdds,
+          leg_count:      legCount,
+          slip_price:     slip.slip_price    ?? 1000,
+          note:           slip.note          ?? '',
+          slip_image_url: slip.slip_image_url ?? null,
+          result:         'pending',
         })
         .select()
         .single()
