@@ -14,7 +14,7 @@ export async function getAllTipsters(): Promise<TipsterPublic[]> {
   if (!db) return MOCK_TIPSTERS
 
   const { data, error } = await db
-    .from('tipster_rankings')
+    .from('tipster_stats')
     .select('*')
     .order('score', { ascending: false })
 
@@ -27,7 +27,7 @@ export async function getTipsterByIdentifier(slug: string): Promise<TipsterPubli
   if (!db) return null
 
   const { data } = await db
-    .from('tipster_rankings')
+    .from('tipster_stats')
     .select('*')
     .or(`username.ilike.${slug},id.eq.${slug}`)
     .single()
