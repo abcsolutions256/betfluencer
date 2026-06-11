@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { Lock, ChevronDown, ChevronUp, Smartphone, CheckCircle, Loader2 } from 'lucide-react'
+import { Lock, ChevronDown, ChevronUp, Smartphone, Loader2 } from 'lucide-react'
 import type { Betslip, SlipLeg } from '@/types/betslip'
 import { getRiskLabel } from '@/types/betslip'
 import { resolveImageUrl } from '@/lib/imageUpload'
@@ -25,27 +25,60 @@ function LegRow({ leg }: { leg: SlipLeg }) {
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{leg.match}</div>
         <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>{leg.pick} · {leg.league}</div>
       </div>
-      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gold)', flexShrink: 0 }}>{leg.odds.toFixed(2)}</div>
+      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gold)', flexShrink: 0 }}>{(leg.odds ?? 0).toFixed(2)}</div>
     </div>
   )
 }
 
-// ── INLINE BUY FLOW (shown in gate instead of modal) ─────────────
+// ── INLINE BUY FLOW ───────────────────────────────────────────────
 function InlineBuyGate({ slip, onUnlock }: { slip: Betslip; onUnlock: () => void }) {
-  const [step,  setStep]  = useState<'gate'|'phone'|'prompt'|'paying'>('gate')
-  const [phone, setPhone] = useState('')
+  const [step,    setStep]    = useState<'gate'|'phone'|'prompt'|'paying'|'error'>('gate')
+  const [phone,   setPhone]   = useState('')
+  const [errMsg,  setErrMsg]  = useState('')
 
   async function pay() {
     setStep('paying')
-    await new Promise(r => setTimeout(r, 1800))
-    localStorage.setItem(`bf_slip_${slip.id}`, `+256${phone}`)
-    onUnlock()   // instantly shows legs
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slip_id:    slip.id,
+          tipster_id: slip.tipster_id,
+          user_phone: `+256${phone}`,
+          user_name:  localStorage.getItem('bf_user_name') ?? '',
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        localStorage.setItem(`bf_slip_${slip.id}`, `+256${phone}`)
+        onUnlock()
+      } else {
+        setErrMsg(data.error ?? 'Payment failed. Try again.')
+        setStep('error')
+      }
+    } catch {
+      setErrMsg('Network error. Please try again.')
+      setStep('error')
+    }
   }
 
   if (step === 'paying') return (
-    <div style={{ borderTop: '1px solid var(--line)', padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, background: 'rgba(0,0,0,0.12)' }}>
-      <Loader2 size={24} color="var(--gold)" style={{ animation: 'slipspin 1s linear infinite' }} />
-      <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>Processing payment...</div>
+    <div style={{ borderTop: '1px solid var(--line)', padding: '24px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,0.12)' }}>
+      <Loader2 size={28} color="var(--gold)" style={{ animation: 'slipspin 1s linear infinite' }} />
+      <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700 }}>Check your phone</div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>Enter your Mobile Money PIN to complete payment</div>
+    </div>
+  )
+
+  if (step === 'error') return (
+    <div style={{ borderTop: '1px solid var(--line)', padding: '14px', background: 'rgba(0,0,0,0.12)' }}>
+      <div style={{ background: 'var(--red-lt)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: 'var(--red)', fontWeight: 600 }}>
+        ⚠️ {errMsg}
+      </div>
+      <button onClick={() => setStep('phone')} style={{ width: '100%', padding: '11px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+        Try again
+      </button>
     </div>
   )
 
@@ -55,9 +88,12 @@ function InlineBuyGate({ slip, onUnlock }: { slip: Betslip; onUnlock: () => void
         <Smartphone size={16} color="var(--gold)" />
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white)' }}>Check your phone</div>
       </div>
-      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Enter your PIN to pay <span style={{ color: 'var(--gold)', fontWeight: 800 }}>UGX {slip.slip_price.toLocaleString()}</span></div>
-      <button onClick={pay} style={{ width: '100%', padding: '11px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer', marginBottom: 6 }}>
-        I've entered my PIN — unlock now
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.6 }}>
+        A Mobile Money prompt has been sent to <span style={{ color: 'var(--gold)', fontWeight: 700 }}>+256{phone}</span>.<br />
+        Enter your PIN to pay <span style={{ color: 'var(--gold)', fontWeight: 800 }}>UGX {(slip.slip_price ?? 0).toLocaleString()}</span>
+      </div>
+      <button onClick={pay} style={{ width: '100%', padding: '11px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer', marginBottom: 8 }}>
+        I've entered my PIN — show me the slip
       </button>
       <button onClick={() => setStep('phone')} style={{ width: '100%', padding: '9px', background: 'none', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
         Didn't receive it?
@@ -68,7 +104,7 @@ function InlineBuyGate({ slip, onUnlock }: { slip: Betslip; onUnlock: () => void
   if (step === 'phone') return (
     <div style={{ borderTop: '1px solid var(--line)', padding: '14px', background: 'rgba(0,0,0,0.12)' }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white)', marginBottom: 3 }}>Buy this slip</div>
-      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>Unlocks immediately after payment</div>
+      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>Unlocks immediately after payment · MTN or Airtel Money</div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
         <div style={{ padding: '10px 10px', background: 'var(--bg3)', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: 10, fontWeight: 800, color: 'var(--offwhite)', fontSize: 12, flexShrink: 0 }}>+256</div>
         <input
@@ -81,7 +117,7 @@ function InlineBuyGate({ slip, onUnlock }: { slip: Betslip; onUnlock: () => void
         onClick={() => phone.length >= 7 && setStep('prompt')}
         style={{ width: '100%', padding: '11px', background: phone.length < 7 ? 'rgba(245,166,35,0.35)' : 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: phone.length < 7 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
       >
-        <Smartphone size={14} /> Pay UGX {slip.slip_price.toLocaleString()}
+        <Smartphone size={14} /> Pay UGX {(slip.slip_price ?? 0).toLocaleString()}
       </button>
     </div>
   )
@@ -97,14 +133,14 @@ function InlineBuyGate({ slip, onUnlock }: { slip: Betslip; onUnlock: () => void
         onClick={() => setStep('phone')}
         style={{ width: '100%', padding: '12px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 800 }}
       >
-        Buy slip · UGX {slip.slip_price.toLocaleString()}
+        Buy slip · UGX {(slip.slip_price ?? 0).toLocaleString()}
       </button>
-      <div style={{ textAlign: 'center', marginTop: 6, fontSize: 10, color: 'var(--muted)' }}>One-time · Unlocks immediately</div>
+      <div style={{ textAlign: 'center', marginTop: 6, fontSize: 10, color: 'var(--muted)' }}>One-time · Unlocks immediately · MTN or Airtel Money</div>
     </div>
   )
 }
 
-// ── SLIP CONTENT (legs, screenshot, or booking code) ─────────────
+// ── SLIP CONTENT ─────────────────────────────────────────────────
 function SlipContent({ slip }: { slip: Betslip }) {
   const [copied, setCopied] = useState(false)
 
@@ -131,63 +167,96 @@ function SlipContent({ slip }: { slip: Betslip }) {
       <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
         Open <strong style={{ color: 'var(--offwhite)' }}>{slip.betting_site}</strong> → go to booking/share codes → enter this code to load the full slip.
       </div>
+      {/* Show legs if available */}
+      {slip.legs?.length > 0 && (
+        <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>Matches</div>
+          {slip.legs.map(leg => <LegRow key={leg.id} leg={leg} />)}
+        </div>
+      )}
     </div>
   )
 
+  // Screenshot mode — show legs if available, otherwise show image
   if (slip.posting_mode === 'screenshot') {
-    // Show parsed legs if available, otherwise just show the slip image
     if (slip.legs?.length > 0) {
-      return <>{slip.legs.map(leg => <LegRow key={leg.id} leg={leg} />)}</>
+      return (
+        <div>
+          <div style={{ padding: '8px 14px 4px', fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+            Parsed legs · {slip.betting_site}
+          </div>
+          {slip.legs.map(leg => <LegRow key={leg.id} leg={leg} />)}
+          {slip.slip_image_url && (
+            <div style={{ padding: '10px 14px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>Betslip Screenshot</div>
+              <img src={resolveImageUrl(slip.slip_image_url)} alt="Betslip" style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(245,166,35,0.3)', display: 'block' }} />
+            </div>
+          )}
+        </div>
+      )
     }
-    // Fallback — show image only if legs weren't extracted
     if (slip.slip_image_url) return (
       <div style={{ borderTop: '1px solid var(--line)', padding: '12px 14px' }}>
         <img src={resolveImageUrl(slip.slip_image_url)} alt="Betslip" style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(245,166,35,0.3)', display: 'block' }} />
       </div>
     )
-    return <>{slip.legs?.map(leg => <LegRow key={leg.id} leg={leg} />)}</>
   }
-  return <>{slip.legs.map(leg => <LegRow key={leg.id} leg={leg} />)}</>
+
+  // Manual mode with legs
+  if (slip.legs?.length > 0) {
+    return <>{slip.legs.map(leg => <LegRow key={leg.id} leg={leg} />)}</>
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--line)', padding: '14px', textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>
+      No match details available
+    </div>
+  )
 }
 
 // ── BETSLIP CARD ─────────────────────────────────────────────────
 function BetslipCard({ slip, defaultOpen = false }: { slip: Betslip; defaultOpen?: boolean }) {
-  const [open,    setOpen]    = useState(defaultOpen)
+  const [open,     setOpen]     = useState(defaultOpen)
   const [unlocked, setUnlocked] = useState(() => {
     if (typeof window === 'undefined') return false
     return !!localStorage.getItem(`bf_slip_${slip.id}`)
   })
 
-  // RULE: pending = locked until paid. win/loss = free for everyone.
-  const finished  = slip.result === 'win' || slip.result === 'loss'
-  const canView   = finished || unlocked
-  const wonLegs   = slip.legs?.filter(l => l.result === 'win').length ?? 0
-  const lostLegs  = slip.legs?.filter(l => l.result === 'loss').length ?? 0
-  const pendLegs  = slip.legs?.filter(l => l.result === 'pending').length ?? 0
-  const risk      = getRiskLabel(slip.total_odds)
+  const finished = slip.result === 'win' || slip.result === 'loss'
+  const canView  = finished || unlocked
+  const legs     = slip.legs ?? []
+  const wonLegs  = legs.filter(l => l.result === 'win').length
+  const lostLegs = legs.filter(l => l.result === 'loss').length
+  const pendLegs = legs.filter(l => l.result === 'pending').length
+  const totalOdds = slip.total_odds ?? 0
+  const risk     = getRiskLabel(totalOdds)
 
   return (
-    <div style={{ background: 'var(--card)', borderRadius: 16, border: `1px solid ${slip.total_odds >= 10 ? 'rgba(245,166,35,0.35)' : 'var(--line)'}`, borderLeft: slip.total_odds >= 10 ? '3px solid var(--gold)' : undefined, marginBottom: 8, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--card)', borderRadius: 16, border: `1px solid ${totalOdds >= 10 ? 'rgba(245,166,35,0.35)' : 'var(--line)'}`, borderLeft: totalOdds >= 10 ? '3px solid var(--gold)' : undefined, marginBottom: 8, overflow: 'hidden' }}>
 
       {/* Header */}
       <div style={{ padding: '12px 14px 10px', cursor: 'pointer' }} onClick={() => setOpen(!open)}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)' }}>Betslip</span>
-              <span style={{ background: 'var(--bg3)', color: 'var(--muted)', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>{slip.legs?.length ?? slip.leg_count} legs</span>
+              <span style={{ background: 'var(--bg3)', color: 'var(--muted)', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>
+                {legs.length || slip.leg_count || 0} legs
+              </span>
               <span style={{ background: risk.bg, color: risk.color, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, border: `1px solid ${risk.color}40` }}>{risk.label}</span>
-              {/* Free to view badge for finished slips */}
+              {unlocked && !finished && (
+                <span style={{ background: 'rgba(46,204,122,0.1)', color: 'var(--green)', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>Unlocked ✓</span>
+              )}
               {finished && (
                 <span style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>Free to view</span>
               )}
             </div>
             <div style={{ fontSize: 10, color: 'var(--muted)' }}>
-              {new Date(slip.posted_at).toLocaleDateString('en-UG', { weekday: 'short', day: 'numeric', month: 'short' })}
+              {slip.posted_at ? new Date(slip.posted_at).toLocaleDateString('en-UG', { weekday: 'short', day: 'numeric', month: 'short' }) : ''}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--gold)' }}>{slip.total_odds.toFixed(2)}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--gold)' }}>{totalOdds.toFixed(2)}</div>
             <div style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 600 }}>total odds</div>
           </div>
         </div>

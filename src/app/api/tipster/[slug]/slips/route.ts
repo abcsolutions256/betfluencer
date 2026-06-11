@@ -5,9 +5,15 @@ export async function GET(_: Request, { params }: { params: { slug: string } }) 
   const db = supabaseServer()
   const { data } = await db
     .from('betslips')
-    .select('*')
+    .select('*, betslip_legs(*)')
     .eq('tipster_id', params.slug)
     .order('posted_at', { ascending: false })
     .limit(50)
-  return NextResponse.json({ slips: data ?? [] })
+
+  const slips = (data ?? []).map((s: any) => ({
+    ...s,
+    legs: s.betslip_legs ?? [],
+  }))
+
+  return NextResponse.json({ slips })
 }
