@@ -107,9 +107,24 @@ function BuyModal({ slip, tipsterName, onClose }: {
 
   async function pay() {
     setStep('processing')
-    await new Promise(r => setTimeout(r, 1800))
-    localStorage.setItem(`bf_slip_${slip.id}`, `+256${phone}`)
-    onClose(true)
+    const res = await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slip_id:    slip.id,
+        tipster_id: slip.tipster_id,
+        user_phone: `+256${phone}`,
+        user_name:  localStorage.getItem('bf_user_name') ?? '',
+      }),
+    })
+    const data = await res.json()
+    if (data.success) {
+      localStorage.setItem(`bf_slip_${slip.id}`, `+256${phone}`)
+      onClose(true)
+    } else {
+      setStep('enter')
+      alert(data.error ?? 'Payment failed. Try again.')
+    }
   }
 
   return (
