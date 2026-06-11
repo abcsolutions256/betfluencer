@@ -9,7 +9,7 @@ export async function GET(_: Request, { params }: { params: { slug: string } }) 
     db.from('betslips').select('id, result, total_odds, posted_at').eq('tipster_id', id),
     db.from('slip_purchases').select('user_phone').eq('tipster_id', id),
     db.from('earnings').select('amount').eq('tipster_id', id),
-    db.from('tipster_stats').select('id').order('subscriber_count', { ascending: false }),
+    db.from('tipster_rankings').select('id').order('subscriber_count', { ascending: false }),
   ])
 
   const slips = slipsRes.data ?? []

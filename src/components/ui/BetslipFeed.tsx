@@ -1,9 +1,10 @@
 'use client'
 import { useState } from 'react'
-import { Lock, ChevronDown, ChevronUp, Smartphone, CheckCircle, Loader2 } from 'lucide-react'
+import { Lock, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Betslip, SlipLeg } from '@/types/betslip'
 import { getRiskLabel } from '@/types/betslip'
 import { resolveImageUrl } from '@/lib/imageUpload'
+import { usePayment } from '@/hooks/usePayment'
 
 // ── HELPERS ───────────────────────────────────────────────────────
 function Dot({ result }: { result: SlipLeg['result'] }) {
@@ -30,63 +31,21 @@ function LegRow({ leg }: { leg: SlipLeg }) {
   )
 }
 
-// ── INLINE BUY FLOW (shown in gate instead of modal) ─────────────
-function InlineBuyGate({ slip, onUnlock }: { slip: Betslip; onUnlock: () => void }) {
-  const [step,  setStep]  = useState<'gate'|'phone'|'prompt'|'paying'>('gate')
-  const [phone, setPhone] = useState('')
+// ── BUY GATE (opens the real ioTec PaymentSheet) ─────────────────
+function InlineBuyGate({ slip, tipsterName, onUnlock }: { slip: Betslip; tipsterName?: string; onUnlock: () => void }) {
+  const { pay, sheet } = usePayment()
 
-  async function pay() {
-    setStep('paying')
-    await new Promise(r => setTimeout(r, 1800))
-    localStorage.setItem(`bf_slip_${slip.id}`, `+256${phone}`)
-    onUnlock()   // instantly shows legs
+  async function buy() {
+    const r = await pay({
+      betslipId: slip.id,
+      amount:    slip.slip_price,
+      tipsterName,
+      slipLabel: `${slip.legs?.length ?? slip.leg_count} legs · odds ${(slip.total_odds ?? 0).toFixed(2)}`,
+    })
+    // Refetch from the server — the paid slip now returns unlocked (with its code).
+    if (r.status === 'success') onUnlock()
   }
 
-  if (step === 'paying') return (
-    <div style={{ borderTop: '1px solid var(--line)', padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, background: 'rgba(0,0,0,0.12)' }}>
-      <Loader2 size={24} color="var(--gold)" style={{ animation: 'slipspin 1s linear infinite' }} />
-      <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>Processing payment...</div>
-    </div>
-  )
-
-  if (step === 'prompt') return (
-    <div style={{ borderTop: '1px solid var(--line)', padding: '14px', background: 'rgba(0,0,0,0.12)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <Smartphone size={16} color="var(--gold)" />
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white)' }}>Check your phone</div>
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Enter your PIN to pay <span style={{ color: 'var(--gold)', fontWeight: 800 }}>UGX {slip.slip_price.toLocaleString()}</span></div>
-      <button onClick={pay} style={{ width: '100%', padding: '11px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer', marginBottom: 6 }}>
-        I've entered my PIN — unlock now
-      </button>
-      <button onClick={() => setStep('phone')} style={{ width: '100%', padding: '9px', background: 'none', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-        Didn't receive it?
-      </button>
-    </div>
-  )
-
-  if (step === 'phone') return (
-    <div style={{ borderTop: '1px solid var(--line)', padding: '14px', background: 'rgba(0,0,0,0.12)' }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white)', marginBottom: 3 }}>Buy this slip</div>
-      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>Unlocks immediately after payment</div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-        <div style={{ padding: '10px 10px', background: 'var(--bg3)', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: 10, fontWeight: 800, color: 'var(--offwhite)', fontSize: 12, flexShrink: 0 }}>+256</div>
-        <input
-          style={{ flex: 1, padding: '10px 12px', background: 'var(--bg3)', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: 10, fontSize: 14, color: 'var(--white)', outline: 'none' }}
-          type="tel" placeholder="7XX XXX XXX" value={phone} onChange={e => setPhone(e.target.value)}
-          autoFocus
-        />
-      </div>
-      <button
-        onClick={() => phone.length >= 7 && setStep('prompt')}
-        style={{ width: '100%', padding: '11px', background: phone.length < 7 ? 'rgba(245,166,35,0.35)' : 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: phone.length < 7 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-      >
-        <Smartphone size={14} /> Pay UGX {slip.slip_price.toLocaleString()}
-      </button>
-    </div>
-  )
-
-  // Default gate
   return (
     <div style={{ borderTop: '1px solid var(--line)', padding: '12px 14px 14px', background: 'rgba(0,0,0,0.12)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -94,12 +53,13 @@ function InlineBuyGate({ slip, onUnlock }: { slip: Betslip; onUnlock: () => void
         <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Unlock to see full slip</div>
       </div>
       <button
-        onClick={() => setStep('phone')}
+        onClick={buy}
         style={{ width: '100%', padding: '12px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 800 }}
       >
         Buy slip · UGX {slip.slip_price.toLocaleString()}
       </button>
-      <div style={{ textAlign: 'center', marginTop: 6, fontSize: 10, color: 'var(--muted)' }}>One-time · Unlocks immediately</div>
+      <div style={{ textAlign: 'center', marginTop: 6, fontSize: 10, color: 'var(--muted)' }}>One-time · Mobile Money or Card</div>
+      {sheet}
     </div>
   )
 }
@@ -151,16 +111,15 @@ function SlipContent({ slip }: { slip: Betslip }) {
 }
 
 // ── BETSLIP CARD ─────────────────────────────────────────────────
-function BetslipCard({ slip, defaultOpen = false }: { slip: Betslip; defaultOpen?: boolean }) {
-  const [open,    setOpen]    = useState(defaultOpen)
-  const [unlocked, setUnlocked] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return !!localStorage.getItem(`bf_slip_${slip.id}`)
-  })
+function BetslipCard({ slip, tipsterName, defaultOpen = false, onPurchased }: { slip: Betslip; tipsterName?: string; defaultOpen?: boolean; onPurchased?: () => void }) {
+  const [open, setOpen] = useState(defaultOpen)
 
-  // RULE: pending = locked until paid. win/loss = free for everyone.
-  const finished  = slip.result === 'win' || slip.result === 'loss'
-  const canView   = finished || unlocked
+  // The server is the source of truth: `locked === false` means this buyer
+  // paid (so the picks are present). win/loss slips are always free to view.
+  // We do NOT trust localStorage here — a stale flag would show an empty
+  // "unlocked" card whose code was stripped server-side.
+  const finished = slip.result === 'win' || slip.result === 'loss'
+  const canView  = finished || slip.locked === false
   const wonLegs   = slip.legs?.filter(l => l.result === 'win').length ?? 0
   const lostLegs  = slip.legs?.filter(l => l.result === 'loss').length ?? 0
   const pendLegs  = slip.legs?.filter(l => l.result === 'pending').length ?? 0
@@ -209,14 +168,14 @@ function BetslipCard({ slip, defaultOpen = false }: { slip: Betslip; defaultOpen
       {open && (
         canView
           ? <SlipContent slip={slip} />
-          : <InlineBuyGate slip={slip} onUnlock={() => setUnlocked(true)} />
+          : <InlineBuyGate slip={slip} tipsterName={tipsterName} onUnlock={() => onPurchased?.()} />
       )}
     </div>
   )
 }
 
 // ── MAIN FEED ─────────────────────────────────────────────────────
-export function BetslipFeed({ slips }: { slips: Betslip[] }) {
+export function BetslipFeed({ slips, tipsterName, onPurchased }: { slips: Betslip[]; tipsterName?: string; onPurchased?: () => void }) {
   const sorted = [...slips].sort((a, b) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime())
   return (
     <>
@@ -233,7 +192,7 @@ export function BetslipFeed({ slips }: { slips: Betslip[] }) {
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--offwhite)' }}>No tips posted yet</div>
         </div>
       ) : sorted.map((slip, i) => (
-        <BetslipCard key={slip.id} slip={slip} defaultOpen={i === 0 && slip.result !== 'pending'} />
+        <BetslipCard key={slip.id} slip={slip} tipsterName={tipsterName} defaultOpen={i === 0 && slip.result !== 'pending'} onPurchased={onPurchased} />
       ))}
     </>
   )

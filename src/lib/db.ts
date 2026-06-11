@@ -1,12 +1,9 @@
-// ── Database queries with mock fallback ──────────────────────────
-// Uses Supabase when configured, falls back to mock data locally
+// ── Database queries ──────────────────────────────────────────────
+// Supabase (service role) with a mock fallback for the tipster listing.
 
 import { supabaseServer } from './supabase'
-import {
-  MOCK_TIPSTERS,
-  getTipsterBySlug
-} from './mockData'
-import type { TipsterPublic, Tip, Subscription } from '@/types'
+import { MOCK_TIPSTERS } from './mockData'
+import type { TipsterPublic } from '@/types'
 
 // ── TIPSTERS ─────────────────────────────────────────────────────
 export async function getAllTipsters(): Promise<TipsterPublic[]> {
@@ -35,97 +32,10 @@ export async function getTipsterByIdentifier(slug: string): Promise<TipsterPubli
   return data ?? null
 }
 
-// ── TIPS ─────────────────────────────────────────────────────────
-export async function getTipsByTipster(tipsterId: string): Promise<Tip[]> {
-  const db = supabaseServer()
-  if (!db) return []
-
-  const { data } = await db
-    .from('tips')
-    .select('*')
-    .eq('tipster_id', tipsterId)
-    .order('created_at', { ascending: false })
-    .limit(50)
-
-  return data ?? []
-}
-
-export async function createTip(tip: Omit<Tip, 'id' | 'created_at' | 'result'>): Promise<Tip | null> {
-  const db = supabaseServer()
-  if (!db) {
-    // Mock response
-    return { ...tip, id: 'mock-' + Date.now(), result: 'pending', created_at: new Date().toISOString() }
-  }
-
-  const { data } = await db
-    .from('tips')
-    .insert({ ...tip, result: 'pending' })
-    .select()
-    .single()
-
-  return data ?? null
-}
-
-// ── SUBSCRIPTIONS ────────────────────────────────────────────────
-export async function getSubscriptionsByPhone(phone: string) {
-  const db = supabaseServer()
-  if (!db) return []
-
-  const { data } = await db
-    .from('subscriptions')
-    .select('*, tipster:tipster_rankings(*)')
-    .eq('user_phone', phone)
-    .eq('status', 'active')
-    .order('expires_at', { ascending: false })
-
-  return data ?? []
-}
-
-export async function checkActiveSubscription(
-  userPhone: string,
-  tipsterId: string
-): Promise<boolean> {
-  const db = supabaseServer()
-  if (!db) {
-    return false // no mock subs in production
-  }
-
-  const { data } = await db
-    .from('subscriptions')
-    .select('id')
-    .eq('user_phone', userPhone)
-    .eq('tipster_id', tipsterId)
-    .eq('status', 'active')
-    .gt('expires_at', new Date().toISOString())
-    .single()
-
-  return !!data
-}
-
-export async function createSubscription(sub: {
-  tipster_id:  string
-  user_phone:  string
-  user_name:   string
-  plan:        'weekly' | 'monthly'
-  amount_paid: number
-  expires_at:  string
-}) {
-  const db = supabaseServer()
-  if (!db) return { id: 'mock-sub-' + Date.now(), ...sub, status: 'active', started_at: new Date().toISOString() }
-
-  const { data } = await db
-    .from('subscriptions')
-    .insert({ ...sub, status: 'active' })
-    .select()
-    .single()
-
-  return data
-}
-
 // ── TIPSTER AUTH ─────────────────────────────────────────────────
 export async function getTipsterByPhone(phone: string) {
   const db = supabaseServer()
-  if (!db) return MOCK_TIPSTERS.find(t => t.id === '1') ?? null // demo fallback
+  if (!db) return null
 
   const { data } = await db
     .from('tipsters')
@@ -145,7 +55,7 @@ export async function createTipsterAccount(tipster: {
   description:   string
 }) {
   const db = supabaseServer()
-  if (!db) return { id: '1', ...tipster }
+  if (!db) return null
 
   const { data } = await db
     .from('tipsters')

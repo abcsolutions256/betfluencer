@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTipsterByIdentifier, getTipsByTipster } from '@/lib/db'
+import { getTipsterByIdentifier } from '@/lib/db'
 
 export async function GET(
   _req: NextRequest,
@@ -7,6 +7,5 @@ export async function GET(
 ) {
   const tipster = await getTipsterByIdentifier(params.slug)
   if (!tipster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const tips = await getTipsByTipster(tipster.id)
-  return NextResponse.json({ tipster, tips })
+  return NextResponse.json({ tipster })
 }

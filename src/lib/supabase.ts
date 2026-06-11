@@ -10,7 +10,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnon)
 // Server client — uses correct project REST URL with service role key
 export function supabaseServer() {
   return createClient(
-    `https://sooutpsbdgqelnnnfezp.supabase.co`,
+    supabaseUrl,
     serviceKey,
     { auth: { persistSession: false } }
   )

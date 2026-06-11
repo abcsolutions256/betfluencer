@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
@@ -18,19 +18,25 @@ export default function ChannelPage() {
   const [tab,     setTab]     = useState<'slips' | 'about'>('slips')
   const [loading, setLoading] = useState(true)
 
+  // Fetch slips, passing the buyer identity so paid slips come back unlocked.
+  const loadSlips = useCallback(() => {
+    if (!slug) return
+    const buyer = typeof window !== 'undefined' ? localStorage.getItem('bf_phone') ?? '' : ''
+    fetch(`/api/tipster/${slug}/slips?buyer=${encodeURIComponent(buyer)}`)
+      .then(r => r.json())
+      .then(d => { if (d.slips) setSlips(d.slips) })
+      .finally(() => setLoading(false))
+  }, [slug])
+
   useEffect(() => {
     if (!slug) return
     // Fetch tipster profile
     fetch(`/api/tipster/${slug}`)
       .then(r => r.json())
       .then(d => { if (d.tipster) setTipster(d.tipster) })
-
-    // Fetch their betslips
-    fetch(`/api/tipster/${slug}/slips`)
-      .then(r => r.json())
-      .then(d => { if (d.slips) setSlips(d.slips) })
-      .finally(() => setLoading(false))
-  }, [slug])
+    // Fetch their betslips (gated server-side)
+    loadSlips()
+  }, [slug, loadSlips])
 
   if (loading || !tipster) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -76,7 +82,7 @@ export default function ChannelPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 pb-8">
-        {tab === 'slips' && <BetslipFeed slips={slips} />}
+        {tab === 'slips' && <BetslipFeed slips={slips} tipsterName={tipster.name} onPurchased={loadSlips} />}
 
         {tab === 'about' && (
           <div className="card">

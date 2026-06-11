@@ -28,6 +28,7 @@ type Betslip = {
   posted_at: string
   booking_code: string
   betting_site: string
+  locked?: boolean
 }
 
 type Earning = {
@@ -150,8 +151,8 @@ export default function TipsterDashboard() {
               <div key={b.id} className="card" style={{ padding:'12px 14px' }}>
                 <div className="flex justify-between items-center">
                   <div>
-                    <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site} · {b.leg_count} legs · ×{b.total_odds}</div>
-                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700 }}>{b.booking_code||'—'}</span> · UGX {(b.slip_price||0).toLocaleString()}</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site || (b.locked ? 'Slip' : '—')} · {b.leg_count} legs · ×{b.total_odds}</div>
+                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700 }}>{b.booking_code || (b.locked ? '🔒 hidden until sold' : '—')}</span> · UGX {(b.slip_price||0).toLocaleString()}</div>
                   </div>
                   <ResultPill result={b.result as any} />
                 </div>
@@ -269,8 +270,8 @@ export default function TipsterDashboard() {
               <div key={b.id} className="card" style={{ marginBottom:8, borderLeft:`3px solid ${b.result==='win'?'var(--green)':b.result==='loss'?'var(--red)':'var(--line)'}` }}>
                 <div className="flex justify-between items-center">
                   <div>
-                    <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site} · {b.leg_count} legs · ×{b.total_odds}</div>
-                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700 }}>{b.booking_code||'—'}</span> · UGX {(b.slip_price||0).toLocaleString()}</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site || (b.locked ? 'Slip' : '—')} · {b.leg_count} legs · ×{b.total_odds}</div>
+                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700 }}>{b.booking_code || (b.locked ? '🔒 hidden until sold' : '—')}</span> · UGX {(b.slip_price||0).toLocaleString()}</div>
                     <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>{b.posted_at ? new Date(b.posted_at).toLocaleDateString() : ''}</div>
                   </div>
                   <ResultPill result={b.result as any} />

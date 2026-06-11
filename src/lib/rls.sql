@@ -1,7 +1,21 @@
 -- ================================================================
 -- BETFLUENCER — Row Level Security Policies
--- Run this in Supabase SQL Editor AFTER schema.sql
+-- Run in the Supabase SQL Editor AFTER schema.sql.
 -- ================================================================
+-- Model: the app touches the DB ONLY with the service-role key
+-- (server-side, in API routes). The service role BYPASSES RLS, so it
+-- always has full access. The public `anon` key (shipped to the
+-- browser) must read NOTHING sensitive and write NOTHING.
+--
+-- Therefore the anon role is granted ONLY:
+--   • read finished (win/loss) betslips + their legs — free to view.
+-- Everything else (pending slips' booking codes, purchases, payments,
+-- earnings, transactions, tipsters incl. password_hash) has NO anon
+-- policy, so RLS denies it by default. Pending-slip content is gated
+-- by payment in the API (src/lib/entitlement.ts).
+--
+-- ⚠️ Do NOT add `using(true)` / `with check(true)` policies here — that
+-- re-opens the data to anyone holding the public anon key.
 
 -- ── ENABLE RLS ON ALL TABLES ─────────────────────────────────────
 alter table tipsters       enable row level security;
@@ -10,79 +24,37 @@ alter table betslip_legs   enable row level security;
 alter table slip_purchases enable row level security;
 alter table payments       enable row level security;
 alter table earnings       enable row level security;
-
--- ── TIPSTERS ─────────────────────────────────────────────────────
--- Anyone can read public tipster profiles
-create policy "tipsters_public_read"
-  on tipsters for select
-  using (true);
-
--- Only the service role can insert/update tipsters (via API)
-create policy "tipsters_service_write"
-  on tipsters for insert
-  with check (true);
-
-create policy "tipsters_service_update"
-  on tipsters for update
-  using (true);
+alter table platform_settings enable row level security;
+-- transactions: enabled in migration 0002.
 
 -- ── BETSLIPS ─────────────────────────────────────────────────────
--- Finished slips (win/loss) are public — anyone can read
-create policy "betslips_finished_public"
-  on betslips for select
+-- Public can read ONLY finished slips. Pending slips (the paid
+-- product) are service-role-only — served, and payment-gated, by the API.
+create policy "betslips_finished_public" on betslips for select
   using (result in ('win', 'loss'));
-
--- Pending slips — only readable via service role (API handles auth check)
-create policy "betslips_pending_service"
-  on betslips for select
-  using (result = 'pending');
-
--- Only service role can insert/update slips
-create policy "betslips_service_insert"
-  on betslips for insert
-  with check (true);
-
-create policy "betslips_service_update"
-  on betslips for update
-  using (true);
+-- (no anon insert/update/select-pending — service role only.)
 
 -- ── BETSLIP LEGS ─────────────────────────────────────────────────
--- Legs follow the same rules as their parent slip
-create policy "legs_public_read"
-  on betslip_legs for select
-  using (true);
-
-create policy "legs_service_write"
-  on betslip_legs for insert
-  with check (true);
-
-create policy "legs_service_update"
-  on betslip_legs for update
-  using (true);
+-- Legs are public only when their parent slip is finished.
+create policy "legs_finished_public" on betslip_legs for select
+  using (exists (
+    select 1 from betslips b
+    where b.id = betslip_legs.betslip_id
+      and b.result in ('win', 'loss')
+  ));
 
 -- ── SLIP PURCHASES ───────────────────────────────────────────────
--- Users can only see their own purchases (by phone)
--- Service role can see all (for tipster earnings, admin)
-create policy "purchases_own_read"
-  on slip_purchases for select
-  using (true);  -- API enforces phone-based filtering
+-- Service-role only. No anon read (buyer phones) and — critically —
+-- no anon insert/update, so nobody can forge an 'active' purchase to
+-- unlock a code. (No policies = denied for anon.)
 
-create policy "purchases_service_insert"
-  on slip_purchases for insert
-  with check (true);
+-- ── PAYMENTS · EARNINGS · TRANSACTIONS ───────────────────────────
+-- Financial data + buyer phones. Service-role only (no policies).
 
-create policy "purchases_service_update"
-  on slip_purchases for update
-  using (true);
+-- ── TIPSTERS ─────────────────────────────────────────────────────
+-- Service-role only — the table holds password_hash. Public tipster
+-- info is exposed via the tipster_rankings view + the API, never the
+-- raw table. (No policies = denied for anon.)
 
--- ── PAYMENTS ─────────────────────────────────────────────────────
--- Only service role — never exposed directly to browser
-create policy "payments_service_only"
-  on payments for all
-  using (true);
-
--- ── EARNINGS ─────────────────────────────────────────────────────
--- Only service role — tipsters see earnings via API only
-create policy "earnings_service_only"
-  on earnings for all
-  using (true);
+-- ── PLATFORM SETTINGS ────────────────────────────────────────────
+-- Service-role only (admin-managed via the API). (No policies.)

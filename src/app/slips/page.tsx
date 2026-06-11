@@ -1,11 +1,12 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, X, Clock, Ticket, Loader2, Smartphone, CheckCircle } from 'lucide-react'
+import { Search, X, Clock, Ticket, Loader2, CheckCircle } from 'lucide-react'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
 import { ODDS_FILTERS, getOddsFilter, parseOddsQuery, getRiskLabel } from '@/types/betslip'
 import type { Betslip, SlipLeg } from '@/types/betslip'
 import { resolveImageUrl } from '@/lib/imageUpload'
+import { PaymentSheet } from '@/components/ui/PaymentSheet'
 
 // ── COUNTDOWN ────────────────────────────────────────────────────
 function Countdown({ targetTime }: { targetTime: string }) {
@@ -79,7 +80,7 @@ function SlipContent({ slip, tipsterUsername, router }: { slip: Betslip; tipster
           <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>{slip.betting_site}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--gold)', letterSpacing: 2 }}>{slip.booking_code}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--gold)', letterSpacing: 2 }}>{slip.booking_code || '—'}</div>
             </div>
             <button onClick={() => navigator.clipboard.writeText(slip.booking_code ?? '')} style={{ fontSize: 11, fontWeight: 700, padding: '6px 12px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
               Copy code
@@ -98,80 +99,15 @@ function SlipContent({ slip, tipsterUsername, router }: { slip: Betslip; tipster
   )
 }
 
-// ── BUY MODAL ────────────────────────────────────────────────────
-function BuyModal({ slip, tipsterName, onClose }: {
-  slip: Betslip; tipsterName: string; onClose: (unlocked: boolean) => void
-}) {
-  const [phone, setPhone] = useState('')
-  const [step,  setStep]  = useState<'enter'|'prompt'|'processing'>('enter')
-
-  async function pay() {
-    setStep('processing')
-    await new Promise(r => setTimeout(r, 1800))
-    localStorage.setItem(`bf_slip_${slip.id}`, `+256${phone}`)
-    onClose(true)
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => step !== 'processing' && onClose(false)}>
-      <div style={{ background: 'var(--bg2)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 480, padding: 20 }} onClick={e => e.stopPropagation()}>
-        {step === 'processing' ? (
-          <div style={{ textAlign: 'center', padding: '28px 0' }}>
-            <Loader2 size={44} color="var(--gold)" style={{ margin: '0 auto 14px', display: 'block', animation: 'slipspin 1s linear infinite' }} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 6 }}>Processing payment</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>Please wait — do not close</div>
-          </div>
-        ) : step === 'prompt' ? (
-          <div style={{ textAlign: 'center', padding: '10px 0' }}>
-            <Smartphone size={40} color="var(--gold)" style={{ margin: '0 auto 14px', display: 'block' }} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 4 }}>Check your phone</div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 6 }}>Enter your PIN to pay</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--gold)', marginBottom: 20 }}>UGX {slip.slip_price.toLocaleString()}</div>
-            <button onClick={pay} style={{ width: '100%', padding: '13px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', marginBottom: 8 }}>
-              I've entered my PIN — show me the slip
-            </button>
-            <button onClick={() => setStep('enter')} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-              Didn't receive it?
-            </button>
-          </div>
-        ) : (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 2 }}>Buy this slip</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{tipsterName} · {slip.legs?.length ?? slip.leg_count} legs · odds {(slip.total_odds ?? 0).toFixed(2)}</div>
-              </div>
-              <button onClick={() => onClose(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--muted)', lineHeight: 1, padding: 0 }}>×</button>
-            </div>
-            <div style={{ background: 'var(--bg3)', borderRadius: 12, padding: '10px 14px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>One-time purchase</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Unlocks this slip only · No subscription</div>
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--gold)' }}>UGX {slip.slip_price.toLocaleString()}</div>
-            </div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--off)', display: 'block', marginBottom: 6 }}>Your Mobile Money number</label>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-              <div style={{ padding: '12px 10px', background: 'var(--bg3)', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: 10, fontWeight: 800, color: 'var(--offwhite)', fontSize: 13, flexShrink: 0 }}>+256</div>
-              <input autoFocus style={{ flex: 1, padding: '12px', background: 'var(--bg3)', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: 10, fontSize: 14, color: 'var(--white)', outline: 'none' }} type="tel" placeholder="7XX XXX XXX" value={phone} onChange={e => setPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && phone.length >= 7 && setStep('prompt')} />
-            </div>
-            <button onClick={() => phone.length >= 7 && setStep('prompt')} style={{ width: '100%', padding: '13px', background: phone.length < 7 ? 'rgba(245,166,35,0.35)' : 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: phone.length < 7 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <Smartphone size={16} /> Pay UGX {slip.slip_price.toLocaleString()} — unlock slip
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ── SLIP CARD ────────────────────────────────────────────────────
-function SlipCard({ slip, tipsterName, tipsterUsername, onBuy, showContent }: {
-  slip: Betslip; tipsterName: string; tipsterUsername: string; onBuy: () => void; showContent: boolean
+function SlipCard({ slip, tipsterName, tipsterUsername, onBuy }: {
+  slip: Betslip; tipsterName: string; tipsterUsername: string; onBuy: () => void
 }) {
   const router   = useRouter()
   const finished = slip.result === 'win' || slip.result === 'loss'
-  const canView  = finished || showContent
+  // Server is the source of truth: locked === false means this buyer paid.
+  const showContent = slip.locked === false
+  const canView     = finished || showContent
   const risk     = getRiskLabel(slip.total_odds ?? 1)
   const legCount = slip.legs?.length ?? slip.leg_count ?? 0
   const firstMatchTime = slip.legs?.[0]?.match_time ?? new Date(Date.now() + 2 * 3600000).toISOString()
@@ -255,18 +191,16 @@ export default function SlipsPage() {
   const [loading,     setLoading]     = useState(true)
   const [allSlips,    setAllSlips]    = useState<{ slip: Betslip; tipsterName: string; tipsterUsername: string }[]>([])
   const [buying,      setBuying]      = useState<{ slip: Betslip; tipsterName: string; tipsterUsername: string } | null>(null)
-  const [unlockedIds, setUnlockedIds] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
-    const keys = Object.keys(localStorage).filter(k => k.startsWith('bf_slip_'))
-    return new Set(keys.map(k => k.replace('bf_slip_', '')))
-  })
-
-  useEffect(() => {
-    fetch('/api/slips')
+  // Fetch slips with the buyer identity so already-paid slips come back unlocked.
+  const loadSlips = useCallback(() => {
+    const buyer = typeof window !== 'undefined' ? localStorage.getItem('bf_phone') ?? '' : ''
+    fetch(`/api/slips?buyer=${encodeURIComponent(buyer)}`)
       .then(r => r.json())
       .then(data => { setAllSlips(data.slips ?? []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => { loadSlips() }, [loadSlips])
 
   const oddsFilter = getOddsFilter(filter)
   const oddsQuery  = parseOddsQuery(query)
@@ -279,9 +213,9 @@ export default function SlipsPage() {
 
   const liveCount = allSlips.filter(s => s.slip.result === 'pending').length
 
-  function handleModalClose(unlocked: boolean, slipId: string) {
-    if (unlocked) setUnlockedIds(prev => { const s = new Set(prev); s.add(slipId); return s })
+  function unlock() {
     setBuying(null)
+    loadSlips()   // refetch — the paid slip now returns unlocked (locked:false) with its code
   }
 
   return (
@@ -330,7 +264,6 @@ export default function SlipsPage() {
                   slip={slip}
                   tipsterName={tipsterName}
                   tipsterUsername={tipsterUsername}
-                  showContent={unlockedIds.has(slip.id)}
                   onBuy={() => setBuying({ slip, tipsterName, tipsterUsername })}
                 />
               ))}
@@ -341,13 +274,15 @@ export default function SlipsPage() {
 
       <BottomNav />
 
-      {buying && (
-        <BuyModal
-          slip={buying.slip}
-          tipsterName={buying.tipsterName}
-          onClose={(unlocked) => handleModalClose(unlocked, buying.slip.id)}
-        />
-      )}
+      <PaymentSheet
+        open={!!buying}
+        amount={buying?.slip.slip_price ?? 0}
+        betslipId={buying?.slip.id ?? ''}
+        tipsterName={buying?.tipsterName}
+        slipLabel={buying ? `${buying.slip.legs?.length ?? buying.slip.leg_count} legs · odds ${(buying.slip.total_odds ?? 0).toFixed(2)}` : undefined}
+        onDone={(r) => { if (buying && r.status === 'success') unlock(); else setBuying(null) }}
+        onClose={() => setBuying(null)}
+      />
 
       <style>{`@keyframes slipspin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
     </div>

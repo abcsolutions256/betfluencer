@@ -2,12 +2,13 @@
 import { useState, useEffect } from 'react'
 import {
   Shield, Home, Users, BarChart2, ShieldCheck,
-  Loader2, LogOut, CheckCircle
+  Loader2, LogOut, CheckCircle, Receipt
 } from 'lucide-react'
+import type { TransactionRow, TxnStatus } from '@/types/payments'
 
 const SESSION_KEY = 'bf_admin_session'
 
-type AdminTab = 'overview' | 'ads' | 'tipsters' | 'revenue' | 'review'
+type AdminTab = 'overview' | 'ads' | 'tipsters' | 'revenue' | 'review' | 'transactions'
 
 // ── LOGIN ─────────────────────────────────────────────────────────
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
@@ -333,6 +334,176 @@ function TipstersTab({ token }: { token: string }) {
   )
 }
 
+// ── TRANSACTIONS TAB ──────────────────────────────────────────────
+const TXN_FILTERS: { key: '' | TxnStatus; label: string }[] = [
+  { key: '',           label: 'All'        },
+  { key: 'pending',    label: 'Pending'    },
+  { key: 'processing', label: 'Processing' },
+  { key: 'success',    label: 'Success'    },
+  { key: 'failed',     label: 'Failed'     },
+]
+
+const PAGE_SIZE = 50
+
+// API joins the tipster (`select('*, tipster:tipsters(name, username)')`),
+// which isn't part of the base TransactionRow type — extend it locally.
+type AdminTxnRow = TransactionRow & { tipster?: { name: string; username: string } | null }
+
+function txnStatusStyle(status: TxnStatus): { bg: string; color: string; border: string } {
+  switch (status) {
+    case 'success':
+      return { bg: 'var(--green-lt)', color: 'var(--green)', border: 'rgba(46,204,122,0.3)' }
+    case 'failed':
+    case 'cancelled':
+      return { bg: 'var(--red-lt)', color: 'var(--red)', border: 'rgba(255,107,107,0.3)' }
+    default: // pending · processing
+      return { bg: 'var(--gold-lt)', color: 'var(--gold)', border: 'rgba(245,166,35,0.3)' }
+  }
+}
+
+function TransactionsTab({ token }: { token: string }) {
+  const [status,  setStatus]  = useState<'' | TxnStatus>('')
+  const [rows,    setRows]    = useState<AdminTxnRow[]>([])
+  const [count,   setCount]   = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [more,    setMore]    = useState(false)
+
+  // Initial load + refetch from offset 0 whenever the status filter changes.
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    fetch(`/api/admin/transactions?status=${status}&limit=${PAGE_SIZE}&offset=0`, { headers: { 'x-admin-token': token } })
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        setRows(d.transactions ?? [])
+        setCount(d.count ?? 0)
+      })
+      .catch(() => { if (!cancelled) { setRows([]); setCount(0) } })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [token, status])
+
+  async function loadMore() {
+    setMore(true)
+    try {
+      const res = await fetch(`/api/admin/transactions?status=${status}&limit=${PAGE_SIZE}&offset=${rows.length}`, { headers: { 'x-admin-token': token } })
+      const d   = await res.json()
+      setRows(prev => [...prev, ...(d.transactions ?? [])])
+      if (typeof d.count === 'number') setCount(d.count)
+    } catch {
+      /* ignore — button stays for retry */
+    }
+    setMore(false)
+  }
+
+  return (
+    <>
+      {/* Status filter */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+        {TXN_FILTERS.map(f => {
+          const active = status === f.key
+          return (
+            <button
+              key={f.key || 'all'}
+              onClick={() => setStatus(f.key)}
+              style={{
+                fontSize: 11, fontWeight: 700, padding: '6px 12px', borderRadius: 20, cursor: 'pointer',
+                background: active ? 'var(--gold-lt)' : 'var(--bg3)',
+                color: active ? 'var(--gold)' : 'var(--muted)',
+                border: `1px solid ${active ? 'rgba(245,166,35,0.3)' : 'var(--line)'}`,
+              }}
+            >
+              {f.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
+          <Loader2 size={22} className="spin" color="var(--gold)" />
+        </div>
+      ) : rows.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>
+          <Receipt size={28} color="var(--muted)" style={{ marginBottom: 8 }} />
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--offwhite)' }}>No transactions yet</div>
+          <div style={{ fontSize: 12, marginTop: 4 }}>Payments will appear here as they come in</div>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+            Transactions ({count.toLocaleString()})
+          </div>
+          {rows.map(t => {
+            const pill   = txnStatusStyle(t.status)
+            const payer  = t.payer || t.user_phone || t.user_email || '—'
+            const method = t.method === 'momo' ? 'MoMo' : t.method === 'card' ? 'Card' : '—'
+            return (
+              <div key={t.id} className="card">
+                {/* Top row: amount + status pill */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--white)' }}>
+                      UGX {t.amount.toLocaleString()}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+                      {new Date(t.created_at).toLocaleString('en-UG', { dateStyle: 'medium', timeStyle: 'short' })}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: pill.bg, color: pill.color, border: `1px solid ${pill.border}`, textTransform: 'capitalize', flexShrink: 0, marginLeft: 8 }}>
+                    {t.status}
+                  </span>
+                </div>
+
+                {/* Detail grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
+                  <TxnField label="Payer" value={payer} />
+                  <TxnField label="Method" value={method} />
+                  <TxnField label="Tipster" value={t.tipster?.name ?? '—'} />
+                  <TxnField label="Type" value={t.type} capitalize />
+                  <TxnField label="Ref" value={t.external_id || '—'} mono span2 />
+                </div>
+              </div>
+            )
+          })}
+
+          {rows.length < count && (
+            <button
+              onClick={loadMore}
+              disabled={more}
+              style={{ width: '100%', padding: '11px', background: 'var(--bg3)', color: 'var(--offwhite)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 }}
+            >
+              {more ? <Loader2 size={15} className="spin" /> : null}
+              {more ? 'Loading…' : `Load more (${(count - rows.length).toLocaleString()})`}
+            </button>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
+// A single labelled cell inside a transaction card.
+function TxnField({ label, value, mono, capitalize, span2 }: { label: string; value: string; mono?: boolean; capitalize?: boolean; span2?: boolean }) {
+  return (
+    <div style={{ minWidth: 0, gridColumn: span2 ? '1 / -1' : undefined }}>
+      <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>{label}</div>
+      <div
+        style={{
+          fontSize: 12, fontWeight: 600, color: 'var(--offwhite)',
+          fontFamily: mono ? 'monospace' : undefined,
+          textTransform: capitalize ? 'capitalize' : undefined,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+        title={value}
+      >
+        {value}
+      </div>
+    </div>
+  )
+}
+
 // ── MAIN ADMIN PANEL ──────────────────────────────────────────────
 export default function AdminPage() {
   const [authed,   setAuthed]   = useState(false)
@@ -378,10 +549,11 @@ export default function AdminPage() {
       {/* Tabs */}
       <div style={{ display: 'flex', background: 'var(--bg2)', borderBottom: '1px solid var(--line)' }}>
         {([
-          { key: 'overview', icon: Home,        label: 'Overview' },
-          { key: 'tipsters', icon: Users,        label: 'Tipsters' },
-          { key: 'revenue',  icon: BarChart2,    label: 'Revenue'  },
-          { key: 'review',   icon: ShieldCheck,  label: 'Review'   },
+          { key: 'overview',     icon: Home,        label: 'Overview' },
+          { key: 'tipsters',     icon: Users,        label: 'Tipsters' },
+          { key: 'transactions', icon: Receipt,      label: 'Txns'     },
+          { key: 'revenue',      icon: BarChart2,    label: 'Revenue'  },
+          { key: 'review',       icon: ShieldCheck,  label: 'Review'   },
         ] as { key: AdminTab; icon: any; label: string }[]).map(({ key, icon: Icon, label }) => (
           <button key={key} onClick={() => setTab(key)} style={{ flex: 1, padding: '10px 4px 8px', border: 'none', background: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, borderBottom: `2px solid ${tab === key ? 'var(--gold)' : 'transparent'}` }}>
             <Icon size={17} color={tab === key ? 'var(--gold)' : 'rgba(255,255,255,0.3)'} />
@@ -430,6 +602,11 @@ export default function AdminPage() {
         {/* ── TIPSTERS ── */}
         {tab === 'tipsters' && (
           <TipstersTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
+        )}
+
+        {/* ── TRANSACTIONS ── */}
+        {tab === 'transactions' && (
+          <TransactionsTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
         )}
 
         {/* ── REVIEW ── */}
