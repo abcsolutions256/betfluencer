@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 
+// Runs per request (hits the DB) — never prerender at build time.
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   const db = supabaseServer()
   const { data: tipsters, error } = await db

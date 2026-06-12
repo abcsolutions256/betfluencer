@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { paidSlipIds, gateSlip } from '@/lib/entitlement'
 
+// Runs per request (hits the DB) — never prerender at build time.
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: Request) {
   const db    = supabaseServer()
   const buyer = new URL(req.url).searchParams.get('buyer')
