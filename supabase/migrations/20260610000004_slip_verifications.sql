@@ -21,8 +21,10 @@ create table slip_verifications (
   scraped_at   timestamptz default now()
 );
 
-create index idx_slip_verif_betslip on slip_verifications(betslip_id);
-create index idx_slip_verif_code    on slip_verifications(booking_code);
+-- One current verification row per betslip (upserted on betslip_id).
+-- Postgres allows multiple NULLs, so manual one-off checks still append.
+create unique index uniq_slip_verif_betslip on slip_verifications(betslip_id);
+create index idx_slip_verif_code on slip_verifications(booking_code);
 
 -- Service-role only (written by the API; never read by the anon key).
 alter table slip_verifications enable row level security;

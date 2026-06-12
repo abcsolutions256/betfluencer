@@ -58,6 +58,8 @@ Detail + file:line for everything below is in [`docs/IMPROVEMENTS.md`](docs/IMPR
 - [x] **Bet-code verification worker built** (2026-06-10) — `bet-code-worker/` (Dockerized Puppeteer scraper API, debug screenshots) + `POST /api/slips/verify-code` (admin) + `slip_verifications` table (migration `0004`, incl. `found`/`screenshot_url`).
   - [x] **Real selectors confirmed from HTML** for 5 UG bookies: 1xBet, 22Bet, betPawa, SportPesa, MozzartBet (mined from Abdallah's `prompt.md` captures with codes loaded). `found` flag returns whether entering the code yielded selections. SportyBet/Betway still unverified placeholders.
   - [ ] **Live-verify** the 5 adapters by running the worker against the real sites with the sample codes (needs a UG-capable host; anti-bot/geo). Watch `screenshot_url` + `found`.
-  - [ ] Wire a "Verify code" button in admin; per-bookie login if a site gates code-loading behind a session (22bet/1xbet may); respect bookie ToS.
+  - [x] **Auto-sync wired** (2026-06-12) — `/api/tips` fires verification on coded-slip post; `/api/slips/sync-codes` poller (token-gated) keeps pending coded slips fresh; shared helper `src/lib/verifyCode.ts` upserts one current row per betslip. Root `docker-compose.yml` runs web + worker + `sync` poller; web is a Next standalone image.
+  - [ ] Wire a "Verify code" button in admin + show verified matches on booking-code slips; per-bookie login if a site gates code-loading behind a session (22bet/1xbet may); respect bookie ToS.
+  - [ ] Screenshots are internal in compose (worker not published) — add a Next `/api/shots/[file]` proxy (or publish the worker) so admins can view `screenshot_url`. Apply migration `0004` to live.
 - [ ] Subscription expiry cron (only if a channel-subscription model is reintroduced — currently per-slip).
 - [ ] Kenya (M-Pesa) / Tanzania expansion.

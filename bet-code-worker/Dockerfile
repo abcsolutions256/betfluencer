@@ -1,6 +1,6 @@
 # Headless-Chrome bet-code worker.
 # Uses Debian's chromium + puppeteer-core (no bundled Chromium download).
-FROM node:20-bookworm-slim
+FROM node:24-bookworm-slim
 
 # Chromium + the shared libs headless Chrome needs.
 RUN apt-get update && apt-get install -y --no-install-recommends \

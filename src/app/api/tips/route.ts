@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { verifyAndRecord } from '@/lib/verifyCode'
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,6 +38,12 @@ export async function POST(req: NextRequest) {
       }
 
       inserted.push(data)
+
+      // Auto-verify booking-code slips against the bookie (best-effort,
+      // non-blocking — the sync poller also keeps these fresh).
+      if (data?.booking_code && data?.betting_site) {
+        verifyAndRecord(data.id, data.betting_site, data.booking_code).catch(() => {})
+      }
     }
 
     return NextResponse.json({ status: 'success', result: inserted.length, tip: inserted[0] })
