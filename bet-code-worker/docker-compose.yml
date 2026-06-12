@@ -1,0 +1,16 @@
+services:
+  bet-code-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    env_file:
+      - .env
+    volumes:
+      # Persist debug screenshots across restarts/recreates.
+      - screenshots:/app/screenshots
+    restart: unless-stopped
+
+volumes:
+  screenshots:

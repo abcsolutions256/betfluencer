@@ -55,6 +55,9 @@ Note: the dead `subscriptions` / `tips` queries were removed (per-slip model); `
 - **Ledger:** every collection + payout is a row in `transactions`; admin → **Transactions** tab.
 - **Before production:** apply `supabase/migrations/20260610000002_transactions.sql` to the live DB and set `IOTEC_*` env (incl. `IOTEC_AUTH_URL`, `IOTEC_WEBHOOK_SECRET` = the callback security header configured in the ioTec portal).
 
+## Bet-code verification worker (built 2026-06-10)
+Separate Dockerized service in [`bet-code-worker/`](bet-code-worker/) — Vercel can't run headless Chrome. It's a **stateless** Puppeteer API: `POST /verify { betting_site, booking_code }` → loads the code on the bookie → returns the selected `matches[]` + `raw_text`. The main app calls it via `POST /api/slips/verify-code` (admin-only) and writes results to the `slip_verifications` table (migration `0004`). Env: `BET_CODE_WORKER_URL` + `BET_CODE_WORKER_KEY`. ⚠️ The per-bookie selectors in `bet-code-worker/src/adapters.js` are **placeholders** — confirm against each live site (anti-bot + changing DOM); `raw_text` is always returned as a fallback. Deploy on Docker (Hetzner/Coolify/Railway), keep it on a private network behind the key.
+
 ## Known landmines (still open — read before touching auth)
 Full detail in [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md). The old buy-flow bugs (disburse-to-buyer, mock data, no UI, unsigned webhook) were fixed in the ioTec rebuild above. Remaining:
 1. **Admin token is forgeable** — `base64("admin:…")` passes `isValidAdminToken`; default password hardcoded in `adminAuth.ts`. (P0)

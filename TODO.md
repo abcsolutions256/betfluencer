@@ -55,6 +55,9 @@ Detail + file:line for everything below is in [`docs/IMPROVEMENTS.md`](docs/IMPR
 - [ ] Add a secret-free `.env.example` and confirm `.env` is gitignored (check it isn't tracked).
 
 ## Backlog (separate quote / later)
-- [ ] **Bet-code verification worker** (Puppeteer posts codes to bookie sites) — fragile, its own discovery + price. Not in this milestone.
+- [x] **Bet-code verification worker built** (2026-06-10) — `bet-code-worker/` (Dockerized Puppeteer scraper API, debug screenshots) + `POST /api/slips/verify-code` (admin) + `slip_verifications` table (migration `0004`, incl. `found`/`screenshot_url`).
+  - [x] **Real selectors confirmed from HTML** for 5 UG bookies: 1xBet, 22Bet, betPawa, SportPesa, MozzartBet (mined from Abdallah's `prompt.md` captures with codes loaded). `found` flag returns whether entering the code yielded selections. SportyBet/Betway still unverified placeholders.
+  - [ ] **Live-verify** the 5 adapters by running the worker against the real sites with the sample codes (needs a UG-capable host; anti-bot/geo). Watch `screenshot_url` + `found`.
+  - [ ] Wire a "Verify code" button in admin; per-bookie login if a site gates code-loading behind a session (22bet/1xbet may); respect bookie ToS.
 - [ ] Subscription expiry cron (only if a channel-subscription model is reintroduced — currently per-slip).
 - [ ] Kenya (M-Pesa) / Tanzania expansion.
