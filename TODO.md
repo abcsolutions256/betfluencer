@@ -1,8 +1,15 @@
 # TODO — Betfluencer
 
-Ordered by priority. Deadline reference: **11 June 2026** (ABC Solutions, payments-live milestone). Today is 10 June — tight, so P0 is "what makes a real shilling move correctly end to end."
+System overview: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Detail + file:line: [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md). ioTec flow: [`docs/PAYMENTS-IOTEC.md`](docs/PAYMENTS-IOTEC.md).
 
-Detail + file:line for everything below is in [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md). ioTec flow spec in [`docs/PAYMENTS-IOTEC.md`](docs/PAYMENTS-IOTEC.md).
+> **Overhaul incoming (2026-06-12):** the foundations are in (payments, gating, code-verification + sync, Docker stack). Paul will define the new product flow next; reshape the items below to fit it.
+
+## Recently landed (2026-06-10 → 06-12)
+- [x] ioTec payments end-to-end (initiate → webhook/status → fulfill); `<PaymentSheet>` + `usePayment` + `BuySlipButton`; `transactions` ledger + admin tab.
+- [x] Server-side paid-content gating (`entitlement.ts`) + RLS lockdown (migration `0003`).
+- [x] Bet-code worker (Puppeteer, 5 bookies HTML-confirmed, debug screenshots) + auto-verify on post + `sync` poller (`verifyCode.ts`, `slip_verifications` table).
+- [x] Full-stack `docker-compose.yml` (web + worker + sync); Next standalone image (node 24).
+- [x] Build/deploy fixes: `force-dynamic` on DB API routes (Docker build), pinned web `PORT=3000` (compose).
 
 ---
 

@@ -1,6 +1,6 @@
 # CLAUDE.md — Betfluencer (Bet Influence)
 
-Guide for Claude Code / any agent working in this repo. Read this first.
+Guide for Claude Code / any agent working in this repo. Read this first. Full system + infra walkthrough in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); backlog in [`TODO.md`](TODO.md).
 
 ## What this is
 Football **tipster marketplace** for Uganda. Tipsters post betslips; users **pay per slip** over Mobile Money to unlock the picks. Finished slips (win/loss) are free to view; pending slips are the paid product. Mobile-first PWA. Client is **ABC Solutions** (Abdallah Kambugu). Sister product **Visit Africa** (travel site, SEO work) is a separate repo.
@@ -47,6 +47,8 @@ Note: the dead `subscriptions` / `tips` queries were removed (per-slip model); `
 - `db.ts` pattern: `const db = supabaseServer(); if (!db) return MOCK…` — the mock fallback is how it runs with no DB.
 - Money is **integer UGX** everywhere (no decimals). Phone normalised to `+256XXXXXXXXX` (`normalisePhone`).
 - Commission = `PLATFORM_COMMISSION` env (default `0.10`).
+- **API routes that touch the DB must `export const dynamic = 'force-dynamic'`** — otherwise `next build` prerenders them and `supabaseServer()` runs with no service key (secrets aren't build args) → "supabaseKey is required" (fails the Docker build). Done for `api/slips` + `api/tipster`.
+- **Docker:** `web` pins `PORT=3000` in compose `environment` (the worker uses 8080; a shared `PORT` in `.env` would leak in via `env_file`). `NEXT_PUBLIC_*` are build args; server secrets are runtime env.
 
 ## Payments (ioTec Pay — implemented 2026-06-10)
 - **Client:** `src/lib/iotec.ts` — OAuth2 via `id.iotec.io/connect/token` → Bearer; `collect`/`getCollectionStatus`/`disburse`/`getWalletBalance`; **demo mode** when `IOTEC_CLIENT_ID` is empty/`demo` (no real charges, polling resolves to success).
