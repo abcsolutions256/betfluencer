@@ -14,7 +14,6 @@ export async function POST(req: NextRequest) {
     for (const slip of slips) {
       const isBookingCode = !!slip.booking_code
 
-      // Safely parse integers and floats — never pass empty strings
       const totalOdds = slip.total_odds !== '' && slip.total_odds != null
         ? parseFloat(slip.total_odds) : null
       const legCount = slip.legs?.length
@@ -45,20 +44,18 @@ export async function POST(req: NextRequest) {
       }
       inserted.push(data)
 
-      // Insert legs if present (screenshot mode)
       if (slip.legs?.length && data?.id) {
         const legs = slip.legs.map((l: any) => ({
           betslip_id: data.id,
-          tipster_id,
           match:      l.match      || '',
           league:     l.league     || '',
           pick:       l.pick       || '',
           odds:       parseFloat(l.odds) || 1,
           match_time: l.match_time || null,
-          market:     l.market     || 'match_result',
           result:     'pending',
         }))
-        await db.from('betslip_legs').insert(legs)
+        const { error: legsError } = await db.from('betslip_legs').insert(legs)
+        if (legsError) console.error('Legs insert error:', legsError)
       }
     }
 
