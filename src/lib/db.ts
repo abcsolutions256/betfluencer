@@ -26,13 +26,23 @@ export async function getTipsterByIdentifier(slug: string): Promise<TipsterPubli
   const db = supabaseServer()
   if (!db) return null
 
-  const { data } = await db
+  // Try username first
+  const { data: byUsername } = await db
     .from('tipster_stats')
     .select('*')
-    .or(`username.ilike."${slug}",id.eq."${slug}"`)
+    .ilike('username', slug)
     .single()
 
-  return data ?? null
+  if (byUsername) return byUsername
+
+  // Try UUID
+  const { data: byId } = await db
+    .from('tipster_stats')
+    .select('*')
+    .eq('id', slug)
+    .single()
+
+  return byId ?? null
 }
 
 // ── TIPS ─────────────────────────────────────────────────────────
@@ -53,7 +63,6 @@ export async function getTipsByTipster(tipsterId: string): Promise<Tip[]> {
 export async function createTip(tip: Omit<Tip, 'id' | 'created_at' | 'result'>): Promise<Tip | null> {
   const db = supabaseServer()
   if (!db) {
-    // Mock response
     return { ...tip, id: 'mock-' + Date.now(), result: 'pending', created_at: new Date().toISOString() }
   }
 
@@ -86,9 +95,7 @@ export async function checkActiveSubscription(
   tipsterId: string
 ): Promise<boolean> {
   const db = supabaseServer()
-  if (!db) {
-    return false // no mock subs in production
-  }
+  if (!db) return false
 
   const { data } = await db
     .from('subscriptions')
@@ -125,7 +132,7 @@ export async function createSubscription(sub: {
 // ── TIPSTER AUTH ─────────────────────────────────────────────────
 export async function getTipsterByPhone(phone: string) {
   const db = supabaseServer()
-  if (!db) return MOCK_TIPSTERS.find(t => t.id === '1') ?? null // demo fallback
+  if (!db) return MOCK_TIPSTERS.find(t => t.id === '1') ?? null
 
   const { data } = await db
     .from('tipsters')
