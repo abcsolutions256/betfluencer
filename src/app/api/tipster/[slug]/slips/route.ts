@@ -4,18 +4,19 @@ import { supabaseServer } from '@/lib/supabase'
 export async function GET(_: Request, { params }: { params: { slug: string } }) {
   const db = supabaseServer()
 
-  const { data: tipster } = await db
+  // Try username first
+  const { data: byUsername } = await db
     .from('tipster_stats')
     .select('id')
-    .or(`username.ilike.${params.slug},id.eq.${params.slug}`)
+    .ilike('username', params.slug)
     .single()
 
-  if (!tipster) return NextResponse.json({ slips: [] })
+  const tipsterId = byUsername?.id ?? params.slug
 
   const { data } = await db
     .from('betslips')
     .select('*, betslip_legs(*)')
-    .eq('tipster_id', tipster.id)
+    .eq('tipster_id', tipsterId)
     .order('posted_at', { ascending: false })
     .limit(50)
 
