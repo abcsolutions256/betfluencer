@@ -53,12 +53,15 @@ export async function fulfillTransaction(txn: TransactionRow): Promise<void> {
 
     const { data: tipster } = await db
       .from('tipsters')
-      .select('name, phone')
+      .select('name, phone, commission_rate')
       .eq('id', tipsterId)
       .single()
 
-    // Platform takes its commission; tipster gets the remainder.
-    const commission    = Math.round(txn.amount * parseFloat(process.env.PLATFORM_COMMISSION ?? '0.10'))
+    // Effective platform cut: per-tipster override → global setting → env.
+    const { data: setting } = await db.from('platform_settings').select('value').eq('key', 'platform_commission').maybeSingle()
+    const globalRate = parseFloat(setting?.value ?? process.env.PLATFORM_COMMISSION ?? '0.10')
+    const rate       = tipster?.commission_rate != null ? Number(tipster.commission_rate) : globalRate
+    const commission    = Math.round(txn.amount * rate)
     const tipsterAmount = txn.amount - commission
     const payee         = (tipster?.phone ?? '').replace('+', '')
 

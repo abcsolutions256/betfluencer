@@ -2,7 +2,25 @@
 
 System overview: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Detail + file:line: [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md). ioTec flow: [`docs/PAYMENTS-IOTEC.md`](docs/PAYMENTS-IOTEC.md).
 
-> **Overhaul incoming (2026-06-12):** the foundations are in (payments, gating, code-verification + sync, Docker stack). Paul will define the new product flow next; reshape the items below to fit it.
+## 🔭 OVERHAUL (in progress, 2026-06-12)
+Decisions: **Supabase Auth** (email+password) · pre-pay **proof only** (no picks) · commission **global default + per-tipster override** · payout **instant per sale**. Paywall = the booking code lives in a separate service-role-only `betslip_codes` table (never a column on `betslips`); only the authenticated, purchase-checked API returns it.
+
+- [x] **Phase 1 — Foundation** — migration `20260612120000_auth_paywall_overhaul.sql` (profiles+role, `betslip_codes` secret table, betslips `verification_status`+proof cols, `slip_purchases.buyer_id`, per-tipster `commission_rate`, RLS keyed on `auth.uid()`); `@supabase/ssr` + session/role helpers (`src/lib/supabase/{server,client}.ts`, `src/lib/auth/session.ts`) + `src/middleware.ts`.
+- [x] **Phase 2 — Auth pages/flows** (done) — `/signup` (buyer) · `/login` · `/tipster/{signup,login}` on Supabase email+pw; `/api/tipster/register` (role→tipster + tipsters row); `/api/tipster/me` + dashboard via session; `/api/auth/logout`; **admin → `requireRole('admin')`** across all admin routes (forgeable `base64("admin:")` token retired). Left for Phase 7: session-aware nav account button; delete dead `adminAuth.ts` + `api/admin/login`.
+- [x] **Phase 3 — Verify workflow** — post coded slip → code into `betslip_codes` → worker verify → on `found`, set `verification_status='verified'` + write proof (game_count, leagues, markets, odds, kickoff); admin override/reject.
+- [x] **Phase 4 — Marketplace + bulletproof paywall** — list only verified slips; reads return **proof only**; gated `GET /api/slips/[id]/reveal` checks an active purchase for `auth.uid()` → returns the secret (`betslip_secrets`: code+site or screenshot, + `betslip_legs` picks + `slip_verifications` matches); else proof. A slip can be bought by many users (unique purchase per (slip,buyer)).
+- [x] **Phase 5 — Purchase tied to account** — `initiate` sets `slip_purchases.buyer_id = auth.uid()`; "my purchases" cross-device; PaymentSheet requires login.
+- [x] **Phase 6 — Commission in admin** — edit global `platform_commission` + per-tipster `commission_rate`; fulfillment uses effective rate (instant payout kept).
+- [x] **Phase 7 — Cleanup** — deleted `adminAuth.ts`, `api/admin/login`, `entitlement.ts`, `api/tipster/auth`; all admin routes on `requireRole('admin')`; build green.
+
+### Overhaul — remaining polish
+- [x] `/slips` + `/mine` rewired to proof+reveal / session (shared `SlipReveal` component).
+- [x] Nav account / login / logout button.
+- [x] Admin **global commission** input.
+- [ ] Admin **per-tipster commission** input + a "verify/reject slip" button (APIs exist: `admin/tipsters` PATCH `commission_rate`, `/api/admin/verify-slip`).
+- [ ] Tipster dashboard: show own pending/verified status + reveal own codes via `/api/slips/[id]/reveal`; wire screenshot-mode posting to send `slip_image_url`.
+- [ ] Admin-created tipsters (the password form) have no Supabase login — retire that form or have it invite-create an auth user. Tipsters should self-signup at `/tipster/signup`.
+- [ ] **Apply migration `0005` to Supabase + turn off email confirmation** before testing; set your own `profiles.role='admin'`.
 
 ## Recently landed (2026-06-10 → 06-12)
 - [x] ioTec payments end-to-end (initiate → webhook/status → fulfill); `<PaymentSheet>` + `usePayment` + `BuySlipButton`; `transactions` ledger + admin tab.

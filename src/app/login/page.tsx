@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
 import { supabaseBrowser } from '@/lib/supabase/client'
 
-export default function TipsterLoginPage() {
+export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -18,21 +18,23 @@ export default function TipsterLoginPage() {
     const { error } = await supabaseBrowser().auth.signInWithPassword({ email: email.trim(), password })
     setLoading(false)
     if (error) { setErr(error.message); return }
-    router.push('/tipster/dashboard'); router.refresh()
+    router.push('/'); router.refresh()
   }
 
   return (
     <div style={shell}>
       <form onSubmit={submit} style={card}>
-        <div style={title}>Tipster log in</div>
-        <div style={sub}>Manage your slips and earnings</div>
+        <div style={title}>Log in</div>
+        <div style={sub}>Welcome back to Betfluencer</div>
         {err && <div style={errorBox}>{err}</div>}
         <input style={input} type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} autoFocus />
         <input style={input} type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
         <button style={btn} disabled={loading || !email || !password}>
           {loading ? <Loader2 size={16} className="spin" /> : 'Log in'}
         </button>
-        <div style={foot}>New tipster? <Link href="/tipster/signup" style={lnk}>Sign up</Link></div>
+        <div style={foot}>
+          No account? <Link href="/signup" style={lnk}>Sign up</Link> · <Link href="/tipster/signup" style={lnk}>Become a tipster</Link>
+        </div>
       </form>
     </div>
   )

@@ -3,13 +3,13 @@
 // Supports optional status filter + pagination.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAdminToken } from '@/lib/adminAuth'
+import { requireRole } from '@/lib/auth/session'
 import { listTransactions } from '@/lib/transactions'
 import type { TxnStatus } from '@/types/payments'
 
 export async function GET(req: NextRequest) {
-  // Admin token required.
-  if (!verifyAdminToken(req)) {
+  // Admin session required.
+  if (!(await requireRole('admin'))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

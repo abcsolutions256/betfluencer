@@ -53,6 +53,8 @@ services:
       SCREENSHOT_TTL_HOURS: ${SCREENSHOT_TTL_HOURS:-48}
     volumes:
       - screenshots:/app/screenshots
+    ports:
+      - "8080:8080"
     expose:
       - "8080"            # internal only — not published
     restart: unless-stopped

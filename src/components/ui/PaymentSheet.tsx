@@ -119,6 +119,15 @@ export function PaymentSheet({
         body: JSON.stringify({ betslip_id: betslipId, method, payer }),
       })
       const data: PaymentResult = await res.json()
+
+      // Not logged in (or other rejection) — initiate returns non-2xx.
+      if (!res.ok) {
+        setMessage((data as any)?.error || 'Could not start the payment.')
+        setState('failed')
+        if (res.status === 401) setTimeout(() => { window.location.href = '/login' }, 1300)
+        return
+      }
+
       txnRef.current = {
         transaction_id: data.transaction_id || '',
         external_id:    data.external_id || '',

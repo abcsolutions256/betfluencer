@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { verifyAdminToken } from '@/lib/adminAuth'
+import { requireRole } from '@/lib/auth/session'
 import { verifyAndRecord } from '@/lib/verifyCode'
 
 const schema = z.object({
@@ -16,7 +16,7 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdminToken(req)) {
+  if (!(await requireRole('admin'))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

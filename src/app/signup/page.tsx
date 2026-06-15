@@ -5,34 +5,45 @@ import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
 import { supabaseBrowser } from '@/lib/supabase/client'
 
-export default function TipsterLoginPage() {
+export default function SignupPage() {
   const router = useRouter()
+  const [name, setName]         = useState('')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [err, setErr]           = useState('')
+  const [msg, setMsg]           = useState('')
   const [loading, setLoading]   = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    setErr(''); setLoading(true)
-    const { error } = await supabaseBrowser().auth.signInWithPassword({ email: email.trim(), password })
+    setErr(''); setMsg(''); setLoading(true)
+    const { data, error } = await supabaseBrowser().auth.signUp({
+      email: email.trim(),
+      password,
+      options: { data: { display_name: name.trim() } },
+    })
     setLoading(false)
     if (error) { setErr(error.message); return }
-    router.push('/tipster/dashboard'); router.refresh()
+    if (!data.session) { setMsg('Check your email to confirm your account, then log in.'); return }
+    router.push('/'); router.refresh()
   }
 
   return (
     <div style={shell}>
       <form onSubmit={submit} style={card}>
-        <div style={title}>Tipster log in</div>
-        <div style={sub}>Manage your slips and earnings</div>
+        <div style={title}>Create account</div>
+        <div style={sub}>Buy and unlock tipster slips</div>
         {err && <div style={errorBox}>{err}</div>}
-        <input style={input} type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} autoFocus />
-        <input style={input} type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
-        <button style={btn} disabled={loading || !email || !password}>
-          {loading ? <Loader2 size={16} className="spin" /> : 'Log in'}
+        {msg && <div style={okBox}>{msg}</div>}
+        <input style={input} placeholder="Name" value={name} onChange={e => setName(e.target.value)} autoFocus />
+        <input style={input} type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+        <input style={input} type="password" placeholder="Password (min 6)" value={password} onChange={e => setPassword(e.target.value)} />
+        <button style={btn} disabled={loading || !email || password.length < 6}>
+          {loading ? <Loader2 size={16} className="spin" /> : 'Sign up'}
         </button>
-        <div style={foot}>New tipster? <Link href="/tipster/signup" style={lnk}>Sign up</Link></div>
+        <div style={foot}>
+          Have an account? <Link href="/login" style={lnk}>Log in</Link> · <Link href="/tipster/signup" style={lnk}>Become a tipster</Link>
+        </div>
       </form>
     </div>
   )
@@ -47,3 +58,4 @@ const btn: React.CSSProperties = { padding: 13, borderRadius: 12, border: 'none'
 const foot: React.CSSProperties = { fontSize: 12, color: 'var(--muted)', textAlign: 'center', marginTop: 6 }
 const lnk: React.CSSProperties = { color: 'var(--gold)', fontWeight: 700, textDecoration: 'none' }
 const errorBox: React.CSSProperties = { background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 10, padding: '9px 12px', fontSize: 13 }
+const okBox: React.CSSProperties = { background: 'var(--green-lt)', color: 'var(--green)', border: '1px solid rgba(46,204,122,0.3)', borderRadius: 10, padding: '9px 12px', fontSize: 13 }

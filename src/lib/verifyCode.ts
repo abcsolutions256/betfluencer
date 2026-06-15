@@ -66,6 +66,30 @@ export async function recordVerification(args: {
   } else {
     await db.from('slip_verifications').insert(row)
   }
+
+  // Reflect the verification onto the betslip: 'verified' + proof when the
+  // worker found matches; 'failed' otherwise (never un-verify an already-
+  // verified slip — only flip rows still 'pending').
+  if (args.betslip_id) {
+    const matches = (args.result?.matches ?? []) as any[]
+    if (args.result?.found && matches.length) {
+      const leagues = Array.from(new Set(matches.map(m => m?.league).filter(Boolean)))
+      const markets = Array.from(new Set(matches.map(m => m?.market).filter(Boolean)))
+      const kicks   = matches.map(m => Date.parse(m?.kickoff)).filter(n => !Number.isNaN(n))
+      await db.from('betslips').update({
+        verification_status: 'verified',
+        verified_at:         new Date().toISOString(),
+        game_count:          matches.length,
+        leagues, markets,
+        earliest_kickoff:    kicks.length ? new Date(Math.min(...kicks)).toISOString() : null,
+      }).eq('id', args.betslip_id)
+    } else {
+      await db.from('betslips').update({ verification_status: 'failed' })
+        .eq('id', args.betslip_id)
+        .eq('verification_status', 'pending')
+    }
+  }
+
   return row
 }
 

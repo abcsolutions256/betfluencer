@@ -180,9 +180,11 @@ function TipstersTab({ token }: { token: string }) {
   const [toggling,     setToggling]     = useState(false)
   const [copied,       setCopied]       = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', password: '', sport: '', description: '' })
+  const [commission, setCommission] = useState(0.10)
+  const [savingC, setSavingC]       = useState(false)
 
   useEffect(() => {
-    fetch('/api/admin/settings').then(r => r.json()).then(d => setSignupsOpen(d.publicSignupsEnabled ?? false))
+    fetch('/api/admin/settings').then(r => r.json()).then(d => { setSignupsOpen(d.publicSignupsEnabled ?? false); setCommission(d.platform_commission ?? 0.10) })
     fetch('/api/admin/tipsters', { headers: { 'x-admin-token': token } }).then(r => r.json()).then(d => setTipsters(d.tipsters ?? []))
   }, [token])
 
@@ -192,6 +194,14 @@ function TipstersTab({ token }: { token: string }) {
     const d = await res.json()
     setSignupsOpen(d.settings?.publicSignupsEnabled ?? !signupsOpen)
     setToggling(false)
+  }
+
+  async function saveCommission() {
+    setSavingC(true)
+    const res = await fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ platform_commission: commission }) })
+    const d = await res.json()
+    if (d.settings) setCommission(d.settings.platform_commission)
+    setSavingC(false)
   }
 
   const [createError, setCreateError] = useState('')
@@ -243,6 +253,17 @@ function TipstersTab({ token }: { token: string }) {
           <button onClick={toggleSignups} disabled={toggling} style={{ fontSize: 11, fontWeight: 800, padding: '7px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', background: signupsOpen ? 'var(--red-lt)' : 'var(--green-lt)', color: signupsOpen ? 'var(--red)' : 'var(--green)' }}>
             {toggling ? '...' : signupsOpen ? 'Close signups' : 'Open signups'}
           </button>
+        </div>
+      </div>
+
+      {/* Platform commission */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)', marginBottom: 2 }}>Platform commission</div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>Global cut on each sale — the tipster keeps the rest. Set a per-tipster override in their row.</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input className="inp" type="number" min={0} max={100} step={1} value={Math.round(commission * 100)} onChange={e => setCommission(Math.max(0, Math.min(100, Number(e.target.value))) / 100)} style={{ width: 90 }} />
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}>% to platform</span>
+          <button onClick={saveCommission} disabled={savingC} style={{ marginLeft: 'auto', padding: '8px 16px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>{savingC ? '...' : 'Save'}</button>
         </div>
       </div>
 
@@ -513,25 +534,36 @@ export default function AdminPage() {
   const [activity, setActivity] = useState<{ text: string; time: string }[]>([])
 
   useEffect(() => {
-    const token = localStorage.getItem(SESSION_KEY)
-    if (token) {
-      setAuthed(true)
-      // Fetch real stats
-      fetch('/api/admin/stats', { headers: { 'x-admin-token': token } })
-        .then(r => r.json())
-        .then(d => { if (d.stats) setStats(d.stats); if (d.activity) setActivity(d.activity) })
-        .catch(() => {})
-    }
-    setChecking(false)
+    // Admin = a logged-in user whose profile role is 'admin' (Supabase Auth).
+    fetch('/api/admin/me')
+      .then(r => {
+        if (!r.ok) return
+        setAuthed(true)
+        fetch('/api/admin/stats')
+          .then(r => r.json())
+          .then(d => { if (d.stats) setStats(d.stats); if (d.activity) setActivity(d.activity) })
+          .catch(() => {})
+      })
+      .finally(() => setChecking(false))
   }, [])
 
-  function logout() {
-    localStorage.removeItem(SESSION_KEY)
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' })
     setAuthed(false)
+    window.location.href = '/login'
   }
 
   if (checking) return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />
-  if (!authed) return <AdminLogin onLogin={() => setAuthed(true)} />
+  if (!authed) return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ textAlign: 'center', maxWidth: 320 }}>
+        <Shield size={28} color="var(--gold)" style={{ margin: '0 auto 12px', display: 'block' }} />
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--white)', marginBottom: 6 }}>Admin access</div>
+        <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 18 }}>Log in with an admin account.</div>
+        <a href="/login" style={{ textDecoration: 'none' }}><button className="btn-gold">Log in</button></a>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>

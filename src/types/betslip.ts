@@ -29,6 +29,11 @@ export interface Betslip {
   booking_code?:         string
   betting_site?:         string
   locked?:               boolean   // server gate: true = paid content stripped
+  verification_status?:  'pending' | 'verified' | 'failed' | 'rejected'
+  game_count?:           number
+  leagues?:              string[]  // proof (no teams/picks)
+  markets?:              string[]
+  earliest_kickoff?:     string
 }
 
 export const ODDS_FILTERS = [

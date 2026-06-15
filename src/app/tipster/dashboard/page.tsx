@@ -72,12 +72,15 @@ export default function TipsterDashboard() {
   function removeSlip(si:number) { setSlips(s => s.filter((_,i)=>i!==si)) }
 
   useEffect(() => {
-    const id = localStorage.getItem('bf_tipster_id')
-    if (!id) { router.push('/tipster/login'); return }
-    fetch(`/api/tipster/${id}`).then(r=>r.json()).then(d => { setTipster(d.tipster) })
-    fetch(`/api/tipster/${id}/stats`).then(r=>r.json()).then(d => { if (d.stats) setStats(d.stats) })
-    fetch(`/api/tipster/${id}/slips`).then(r=>r.json()).then(d => { if (d.slips) setBetslips(d.slips) })
-    fetch(`/api/tipster/${id}/earnings`).then(r=>r.json()).then(d => { if (d.earnings) setEarnings(d.earnings) })
+    // Resolve the logged-in tipster from the Supabase session.
+    fetch('/api/tipster/me').then(r => r.ok ? r.json() : null).then(d => {
+      if (!d?.tipster) { router.push('/tipster/login'); return }
+      const id = d.tipster.id
+      setTipster(d.tipster)
+      fetch(`/api/tipster/${id}/stats`).then(r=>r.json()).then(d => { if (d.stats) setStats(d.stats) })
+      fetch(`/api/tipster/${id}/slips`).then(r=>r.json()).then(d => { if (d.slips) setBetslips(d.slips) })
+      fetch(`/api/tipster/${id}/earnings`).then(r=>r.json()).then(d => { if (d.earnings) setEarnings(d.earnings) })
+    })
   }, [router])
 
   async function postTip() {
