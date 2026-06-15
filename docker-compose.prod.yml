@@ -36,8 +36,6 @@ services:
       BET_CODE_WORKER_KEY: ${BET_CODE_WORKER_KEY}
       SYNC_TOKEN: ${SYNC_TOKEN}
       SYNC_BATCH: ${SYNC_BATCH:-20}
-    ports:
-      - "3000:3000"
     depends_on:
       - bet-code-worker
     restart: unless-stopped
