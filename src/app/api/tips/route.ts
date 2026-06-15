@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
       }
       inserted.push(data)
 
-      if (slip.legs?.length && data?.id) {
+      console.log('Legs check:', { hasLegs: !!slip.legs?.length, legsCount: slip.legs?.length, dataId: data?.id, slipKeys: Object.keys(slip) })
+if (slip.legs?.length && data?.id) {
         const legs = slip.legs.map((l: any) => ({
           betslip_id: data.id,
           match:      l.match      || '',
