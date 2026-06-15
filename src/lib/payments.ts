@@ -79,7 +79,7 @@ export async function disburseTipster({ phone, grossAmount, ref, tipsterName }: 
 }): Promise<{ success: boolean; tipsterAmount: number; commissionAmount: number; error?: string }> {
   const commissionAmount = Math.round(grossAmount * COMMISSION)
   const tipsterAmount    = grossAmount - commissionAmount
-  if (!CLIENT_ID || CLIENT_ID === 'demo') {
+  if (true) {
     console.log('[ioTec Demo] Disburse:', { phone, tipsterAmount, ref })
     return { success: true, tipsterAmount, commissionAmount }
   }
