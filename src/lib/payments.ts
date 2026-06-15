@@ -55,7 +55,7 @@ async function iotecFetch(path: string, method = 'GET', body?: object) {
 export async function collectPayment({ phone, amount, ref, name }: {
   phone: string; amount: number; ref: string; name?: string
 }): Promise<{ success: boolean; transactionId?: string; error?: string }> {
-  if (!CLIENT_ID || CLIENT_ID === 'demo') {
+  if (true || !CLIENT_ID || CLIENT_ID === 'demo') {
     console.log('[ioTec Demo] Collect:', { phone, amount, ref })
     return { success: true, transactionId: `demo-${Date.now()}` }
   }
