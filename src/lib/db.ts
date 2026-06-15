@@ -29,7 +29,7 @@ export async function getTipsterByIdentifier(slug: string): Promise<TipsterPubli
   const { data } = await db
     .from('tipster_stats')
     .select('*')
-    .or(`username.ilike.${slug},id.eq.${slug}`)
+    .or(`username.ilike."${slug}",id.eq."${slug}"`)
     .single()
 
   return data ?? null
