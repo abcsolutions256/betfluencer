@@ -30,10 +30,12 @@ export async function POST(req: NextRequest) {
       .map((l: any) => new Date(l.match_time).getTime())
       .filter((t: number) => !isNaN(t))
 
-    if (!matchTimes.length) continue
+    // If no match times, fall back to posted_at + 3 hours
+    const cutoff = matchTimes.length
+      ? Math.max(...matchTimes)
+      : new Date(slip.posted_at).getTime()
 
-    const latestMatch = Math.max(...matchTimes)
-    if (latestMatch > Date.now() - 2 * 60 * 60 * 1000) continue
+    if (cutoff > Date.now() - 3 * 60 * 60 * 1000) continue
 
     const legResults = await verifySlip(legs)
     const slipResult = calcSlipResult(legResults.map(r => r.result))
