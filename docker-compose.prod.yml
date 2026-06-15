@@ -1,0 +1,81 @@
+# ── Betfluencer full stack ────────────────────────────────────────
+# web   — the Next.js app (betfluencer)
+# bet-code-worker — headless-Chrome scraper (verify system), internal only
+# sync  — polls the app to keep booking-code slips verified against the bookies
+#
+# Flow: a tipster posts/updates a booking-code slip → /api/tips auto-calls the
+# worker → match details upserted into slip_verifications. The sync container
+# re-checks pending coded slips every SYNC_INTERVAL so they stay current with
+# the betting sites.
+#
+# Values come from the root `.env` (same file the app uses). Required there:
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_APP_URL,
+#   SUPABASE_SERVICE_ROLE_KEY, IOTEC_*, ANTHROPIC_API_KEY, ADMIN_PASSWORD,
+#   BET_CODE_WORKER_KEY, SYNC_TOKEN  (and optionally SYNC_INTERVAL, SYNC_BATCH).
+
+name: betfluencer
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* are inlined at build time.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    env_file: .env
+    environment:
+      # Pin the app port — overrides any PORT in .env (the worker uses 8080;
+      # env_file would otherwise leak that PORT into web).
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      # Reach the worker over the internal network (overrides any .env value).
+      BET_CODE_WORKER_URL: http://bet-code-worker:8080
+      BET_CODE_WORKER_KEY: ${BET_CODE_WORKER_KEY}
+      SYNC_TOKEN: ${SYNC_TOKEN}
+      SYNC_BATCH: ${SYNC_BATCH:-20}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - bet-code-worker
+    restart: unless-stopped
+
+  bet-code-worker:
+    build:
+      context: ./bet-code-worker
+      dockerfile: Dockerfile
+    environment:
+      WORKER_API_KEY: ${BET_CODE_WORKER_KEY}
+      PORT: "8080"
+      MAX_CONCURRENT: ${WORKER_MAX_CONCURRENT:-2}
+      SCREENSHOT_TTL_HOURS: ${SCREENSHOT_TTL_HOURS:-48}
+    volumes:
+      - screenshots:/app/screenshots
+    expose:
+      - "8080"            # internal only — not published
+    restart: unless-stopped
+
+  sync:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      - web
+    environment:
+      SYNC_TOKEN: ${SYNC_TOKEN}
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-300}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "sync: waiting for web to boot...";
+        sleep 30;
+        echo "sync: polling /api/slips/sync-codes every $${SYNC_INTERVAL:-300}s";
+        while true; do
+          curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/slips/sync-codes \
+            && echo "" || echo "sync: web unreachable, will retry";
+          sleep "$${SYNC_INTERVAL:-300}";
+        done
+    restart: unless-stopped
+
+volumes:
+  screenshots:
