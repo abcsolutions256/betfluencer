@@ -81,44 +81,86 @@ function StatCard({ val, label, color = 'var(--white)', sub }: { val: string; la
   )
 }
 
-
-
-// ── REVIEW TAB ────────────────────────────────────────────────────
+// ── REVIEW / SETTLEMENT TAB ──────────────────────────────────────
+// Shows all pending slips. Admin settles each: Won / Lost / Void.
 function ReviewTab({ token }: { token: string }) {
-  const [legs, setLegs] = useState<any[]>([])
+  const [slips, setSlips]     = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId]   = useState<string | null>(null)
+  const [verifying, setVerifying] = useState(false)
 
-  useEffect(() => {
-    fetch('/api/admin/review', { headers: { 'x-admin-token': token } })
-      .then(r => r.json()).then(d => setLegs(d.legs ?? []))
-      .catch(() => {})
-  }, [token])
+  function load() {
+    setLoading(true)
+    fetch('/api/admin/pending-slips', { headers: { 'x-admin-token': token } })
+      .then(r => r.json())
+      .then(d => { setSlips(d.slips ?? []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
 
-  async function mark(legId: string, result: 'win' | 'loss') {
-    await fetch('/api/admin/review', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify({ legId, result }) })
-    setLegs(prev => prev.filter(l => l.id !== legId))
+  useEffect(() => { load() }, [token])
+
+  async function settle(slipId: string, result: 'win' | 'loss' | 'void') {
+    setBusyId(slipId)
+    await fetch('/api/admin/settle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slip_id: slipId, result, admin_key: token }),
+    })
+    setSlips(prev => prev.filter(s => s.id !== slipId))
+    setBusyId(null)
+  }
+
+  async function autoVerify() {
+    setVerifying(true)
+    await fetch('/api/verify', { method: 'POST' })
+    setVerifying(false)
+    load()
   }
 
   return (
     <>
       <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: 'var(--offwhite)', lineHeight: 1.6 }}>
-        ⚠️ These legs couldn't be auto-verified — player-specific markets. Mark each manually after checking.
+        Pending slips awaiting settlement. Auto-verify tries the football API first; settle the rest manually.
       </div>
-      {legs.length === 0 ? (
+
+      <button onClick={autoVerify} disabled={verifying} style={{ width: '100%', padding: '10px', background: 'var(--bg3)', color: 'var(--gold)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        {verifying ? <><Loader2 size={14} className="spin" /> Verifying...</> : '↻ Run auto-verification'}
+      </button>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          <Loader2 size={24} color="var(--gold)" className="spin" style={{ margin: '0 auto', display: 'block' }} />
+        </div>
+      ) : slips.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>✓</div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Nothing to review</div>
-          <div style={{ fontSize: 12, marginTop: 4 }}>All legs are verified</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Nothing pending</div>
+          <div style={{ fontSize: 12, marginTop: 4 }}>All slips are settled</div>
         </div>
-      ) : legs.map((leg, i) => (
-        <div key={leg.id} className="card" style={{ borderLeft: '3px solid var(--gold)', marginBottom: 10 }}>
+      ) : slips.map(slip => (
+        <div key={slip.id} className="card" style={{ borderLeft: '3px solid var(--gold)', marginBottom: 10 }}>
           <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)', marginBottom: 2 }}>{leg.match}</div>
-            <div style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 600, marginBottom: 2 }}>{leg.pick}</div>
-            <div style={{ fontSize: 10, color: 'var(--muted)' }}>{leg.tipster_name} · odds {leg.odds}</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)', marginBottom: 2 }}>
+              {slip.betting_site || 'Betslip'} · {slip.leg_count || slip.legs?.length || 0} legs · ×{(slip.total_odds || 0).toFixed(2)}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6 }}>
+              {slip.tipster_name ?? 'Unknown'} · {slip.booking_code ? `Code ${slip.booking_code}` : slip.posting_mode} · UGX {(slip.slip_price || 0).toLocaleString()}
+            </div>
+            {slip.legs?.map((leg: any, i: number) => (
+              <div key={i} style={{ fontSize: 11, color: 'var(--offwhite)', padding: '3px 0', borderTop: i > 0 ? '1px solid var(--line)' : 'none' }}>
+                {leg.match} · <span style={{ color: 'var(--gold)' }}>{leg.pick}</span>
+                {leg.result && leg.result !== 'pending' && (
+                  <span style={{ color: leg.result === 'win' ? 'var(--green)' : 'var(--red)', marginLeft: 6, fontWeight: 700 }}>
+                    {leg.result === 'win' ? '✓' : '✗'}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <button onClick={() => mark(leg.id, 'win')} style={{ padding: '9px', background: 'var(--green-lt)', color: 'var(--green)', border: '1px solid rgba(46,204,122,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>✓ Won</button>
-            <button onClick={() => mark(leg.id, 'loss')} style={{ padding: '9px', background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>✗ Lost</button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            <button disabled={busyId === slip.id} onClick={() => settle(slip.id, 'win')} style={{ padding: '9px', background: 'var(--green-lt)', color: 'var(--green)', border: '1px solid rgba(46,204,122,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', opacity: busyId === slip.id ? 0.5 : 1 }}>✓ Won</button>
+            <button disabled={busyId === slip.id} onClick={() => settle(slip.id, 'loss')} style={{ padding: '9px', background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', opacity: busyId === slip.id ? 0.5 : 1 }}>✗ Lost</button>
+            <button disabled={busyId === slip.id} onClick={() => settle(slip.id, 'void')} style={{ padding: '9px', background: 'var(--bg3)', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', opacity: busyId === slip.id ? 0.5 : 1 }}>Void</button>
           </div>
         </div>
       ))}
