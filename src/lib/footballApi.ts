@@ -1,6 +1,6 @@
 // ── API-Football (api-sports.io) ──────────────────────────────────
 // Auto-verifies betslip legs after match ends
-// Free tier: 100 requests/day — sufficient for launch
+// Free tier: 100 requests/day
 // Docs: https://www.api-football.com/documentation-v3
 
 const API_KEY  = process.env.FOOTBALL_API_KEY ?? ''
@@ -17,18 +17,53 @@ async function apiFetch(endpoint: string) {
   return res.json()
 }
 
+// Normalize a team name for fuzzy comparison
+function normalize(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b(fc|sc|afc|cf|sk|if|ks|women|ladies|w|u\d+|reserves?|ii)\b/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim()
+}
+
+function teamsMatch(apiName: string, slipName: string): boolean {
+  const a = normalize(apiName)
+  const s = normalize(slipName)
+  if (!a || !s) return false
+  return a.includes(s) || s.includes(a) || a.startsWith(s.slice(0, 5)) || s.startsWith(a.slice(0, 5))
+}
+
 // ── FIXTURE LOOKUP ────────────────────────────────────────────────
-export async function findFixture(homeTeam: string, awayTeam: string, date: string) {
-  const data = await apiFetch(`/fixtures?date=${date}&search=${encodeURIComponent(homeTeam)}`)
-  const fixtures = data.response ?? []
-  return fixtures.find((f: any) => {
-    const home = f.teams?.home?.name?.toLowerCase() ?? ''
-    const away = f.teams?.away?.name?.toLowerCase() ?? ''
-    const h    = homeTeam.toLowerCase()
-    const a    = awayTeam.toLowerCase()
-    return (home.includes(h) || h.includes(home)) &&
-           (away.includes(a) || a.includes(away))
-  }) ?? null
+// Searches by team name. If a date is provided, searches that date.
+// Otherwise searches a window around today (covers recent matches).
+export async function findFixture(homeTeam: string, awayTeam: string, date: string | null) {
+  // Build list of dates to try
+  const datesToTry: string[] = []
+  if (date) {
+    datesToTry.push(date)
+  } else {
+    // Search last 4 days through tomorrow
+    const now = Date.now()
+    for (let d = -4; d <= 1; d++) {
+      datesToTry.push(new Date(now + d * 86400000).toISOString().split('T')[0])
+    }
+  }
+
+  for (const tryDate of datesToTry) {
+    try {
+      const data = await apiFetch(`/fixtures?date=${tryDate}&search=${encodeURIComponent(homeTeam)}`)
+      const fixtures = data.response ?? []
+      const match = fixtures.find((f: any) => {
+        const home = f.teams?.home?.name ?? ''
+        const away = f.teams?.away?.name ?? ''
+        return (teamsMatch(home, homeTeam) && teamsMatch(away, awayTeam))
+      })
+      if (match) return match
+    } catch (e) {
+      console.error('findFixture error for date', tryDate, e)
+    }
+  }
+  return null
 }
 
 // ── MARKET VERIFICATION ───────────────────────────────────────────
@@ -37,19 +72,16 @@ export type VerifyResult = 'win' | 'loss' | 'pending' | 'unverifiable'
 export async function verifyLeg(leg: {
   match:      string
   pick:       string
-  match_time: string
+  match_time: string | null
 }): Promise<VerifyResult> {
   try {
     const parts = leg.match.split(/\s+vs\.?\s+/i)
     if (parts.length < 2) return 'unverifiable'
     const [home, away] = parts.map(s => s.trim())
 
-    // Use today's date if match_time is null
-    const date = leg.match_time
-      ? leg.match_time.split('T')[0]
-      : new Date().toISOString().split('T')[0]
+    const date = leg.match_time ? leg.match_time.split('T')[0] : null
 
-    // Only skip if match_time is set and match hasn't finished yet
+    // If match_time is set and the match clearly hasn't finished yet, wait
     if (leg.match_time && new Date(leg.match_time).getTime() > Date.now() - 2 * 60 * 60 * 1000) {
       return 'pending'
     }
@@ -187,7 +219,7 @@ function determineResult(pick: string, data: {
 
 // ── BATCH VERIFY ALL LEGS OF A SLIP ──────────────────────────────
 export async function verifySlip(legs: {
-  id: string; match: string; pick: string; match_time: string
+  id: string; match: string; pick: string; match_time: string | null
 }[]): Promise<{ id: string; result: VerifyResult }[]> {
   const results = await Promise.all(
     legs.map(async leg => ({
