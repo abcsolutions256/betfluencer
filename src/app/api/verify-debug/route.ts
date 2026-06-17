@@ -4,8 +4,8 @@ import { supabaseServer } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-// Debug endpoint — shows exactly what happens when verifying each pending slip
-// No time restrictions. Visit /api/verify-debug in browser.
+// Debug endpoint — uses the real date-range findFixture (no time restrictions).
+// Visit /api/verify-debug in browser.
 export async function GET() {
   const db = supabaseServer()
 
@@ -18,21 +18,17 @@ export async function GET() {
 
   for (const slip of pendingSlips ?? []) {
     const legs = slip.betslip_legs ?? []
+    if (!legs.length) continue   // skip slips with no legs — nothing to verify
+
     const slipReport: any = {
       slip_id: slip.id,
       posting_mode: slip.posting_mode,
-      leg_count: legs.length,
       legs: [],
     }
 
     for (const leg of legs) {
-      const legReport: any = {
-        match: leg.match,
-        pick: leg.pick,
-        match_time: leg.match_time,
-      }
+      const legReport: any = { match: leg.match, pick: leg.pick, match_time: leg.match_time }
 
-      // Try to parse teams
       const parts = leg.match.split(/\s+vs\.?\s+/i)
       if (parts.length < 2) {
         legReport.error = 'Could not split teams (no "vs")'
@@ -43,10 +39,8 @@ export async function GET() {
       legReport.home = home
       legReport.away = away
 
-      const date = leg.match_time
-        ? leg.match_time.split('T')[0]
-        : new Date().toISOString().split('T')[0]
-      legReport.search_date = date
+      const date = leg.match_time ? leg.match_time.split('T')[0] : null
+      legReport.search_mode = date ? `exact date ${date}` : 'date range (last 4 days → tomorrow)'
 
       try {
         const fixture = await findFixture(home, away, date)
@@ -56,8 +50,10 @@ export async function GET() {
           legReport.fixture = {
             api_home: fixture.teams?.home?.name,
             api_away: fixture.teams?.away?.name,
-            status: fixture.fixture?.status?.short,
-            score: `${fixture.goals?.home ?? '?'}-${fixture.goals?.away ?? '?'}`,
+            league:   fixture.league?.name,
+            date:     fixture.fixture?.date,
+            status:   fixture.fixture?.status?.short,
+            score:    `${fixture.goals?.home ?? '?'}-${fixture.goals?.away ?? '?'}`,
           }
         }
       } catch (e: any) {
@@ -70,7 +66,7 @@ export async function GET() {
     report.push(slipReport)
   }
 
-  return NextResponse.json({ total: pendingSlips?.length ?? 0, report }, {
+  return NextResponse.json({ slips_with_legs: report.length, report }, {
     headers: { 'Cache-Control': 'no-store' },
   })
 }
