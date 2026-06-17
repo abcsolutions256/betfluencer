@@ -1,6 +1,9 @@
 // ── API-Football (api-sports.io) ──────────────────────────────────
 // Auto-verifies betslip legs after match ends
-// Free tier: 100 requests/day
+// FREE TIER CONSTRAINTS:
+//   - Only ~3-day window available (yesterday → +2 days). Older dates blocked.
+//   - Cannot combine ?date with ?search. Query by date only, match teams client-side.
+//   - 100 requests/day.
 // Docs: https://www.api-football.com/documentation-v3
 
 const API_KEY  = process.env.FOOTBALL_API_KEY ?? ''
@@ -8,10 +11,7 @@ const BASE_URL = 'https://v3.football.api-sports.io'
 
 async function apiFetch(endpoint: string) {
   const res = await fetch(`${BASE_URL}${endpoint}`, {
-    headers: {
-      'x-apisports-key': API_KEY,
-      'x-rapidapi-key':  API_KEY,
-    },
+    headers: { 'x-apisports-key': API_KEY },
   })
   if (!res.ok) throw new Error(`API-Football error: ${res.status}`)
   return res.json()
@@ -33,30 +33,45 @@ function teamsMatch(apiName: string, slipName: string): boolean {
   return a.includes(s) || s.includes(a) || a.startsWith(s.slice(0, 5)) || s.startsWith(a.slice(0, 5))
 }
 
-// ── FIXTURE LOOKUP ────────────────────────────────────────────────
-// Searches by team name. If a date is provided, searches that date.
-// Otherwise searches a window around today (covers recent matches).
+// ── FIXTURE LOOKUP BY ID (free plan allows this for recent matches) ──
+export async function getFixtureById(fixtureId: number | string) {
+  try {
+    const data = await apiFetch(`/fixtures?id=${fixtureId}`)
+    return data.response?.[0] ?? null
+  } catch (e) {
+    console.error('getFixtureById error:', e)
+    return null
+  }
+}
+
+// ── FIXTURE LOOKUP BY TEAMS + DATE (free-plan compatible) ──────────
+// Queries by DATE ONLY (no search param), then matches teams client-side.
+// Returns null if outside the free-plan window or no match found.
 export async function findFixture(homeTeam: string, awayTeam: string, date: string | null) {
-  // Build list of dates to try
+  // Free plan only allows roughly yesterday → +2 days.
+  // Build candidate dates within that window.
+  const now = Date.now()
+  const allowed = new Set<string>()
+  for (let d = -1; d <= 2; d++) {
+    allowed.add(new Date(now + d * 86400000).toISOString().split('T')[0])
+  }
+
   const datesToTry: string[] = []
-  if (date) {
+  if (date && allowed.has(date)) {
     datesToTry.push(date)
   } else {
-    // Search last 4 days through tomorrow
-    const now = Date.now()
-    for (let d = -4; d <= 1; d++) {
-      datesToTry.push(new Date(now + d * 86400000).toISOString().split('T')[0])
-    }
+    // No usable date — try the whole allowed window
+    datesToTry.push(...Array.from(allowed))
   }
 
   for (const tryDate of datesToTry) {
     try {
-      const data = await apiFetch(`/fixtures?date=${tryDate}&search=${encodeURIComponent(homeTeam)}`)
+      const data = await apiFetch(`/fixtures?date=${tryDate}`)
       const fixtures = data.response ?? []
       const match = fixtures.find((f: any) => {
         const home = f.teams?.home?.name ?? ''
         const away = f.teams?.away?.name ?? ''
-        return (teamsMatch(home, homeTeam) && teamsMatch(away, awayTeam))
+        return teamsMatch(home, homeTeam) && teamsMatch(away, awayTeam)
       })
       if (match) return match
     } catch (e) {
@@ -69,19 +84,43 @@ export async function findFixture(homeTeam: string, awayTeam: string, date: stri
 // ── MARKET VERIFICATION ───────────────────────────────────────────
 export type VerifyResult = 'win' | 'loss' | 'pending' | 'unverifiable'
 
+// Verify by fixture object (already fetched)
+export function verifyLegAgainstFixture(pick: string, fixture: any): VerifyResult {
+  const status = fixture.fixture?.status?.short
+  if (!['FT','AET','PEN'].includes(status)) return 'pending'
+
+  const homeGoals  = fixture.goals?.home ?? 0
+  const awayGoals  = fixture.goals?.away ?? 0
+  const totalGoals = homeGoals + awayGoals
+  const htHome     = fixture.score?.halftime?.home ?? 0
+  const htAway     = fixture.score?.halftime?.away ?? 0
+  const home       = fixture.teams?.home?.name ?? ''
+  const away       = fixture.teams?.away?.name ?? ''
+
+  return determineResult(pick.toLowerCase().trim(), { homeGoals, awayGoals, totalGoals, htHome, htAway, home, away, fixture })
+}
+
 export async function verifyLeg(leg: {
-  match:      string
-  pick:       string
-  match_time: string | null
+  match:       string
+  pick:        string
+  match_time:  string | null
+  fixture_id?: number | string | null
 }): Promise<VerifyResult> {
   try {
+    // If we already stored a fixture_id, verify directly by ID (most reliable)
+    if (leg.fixture_id) {
+      const fixture = await getFixtureById(leg.fixture_id)
+      if (!fixture) return 'pending'
+      return verifyLegAgainstFixture(leg.pick, fixture)
+    }
+
+    // Otherwise resolve by teams + date
     const parts = leg.match.split(/\s+vs\.?\s+/i)
     if (parts.length < 2) return 'unverifiable'
     const [home, away] = parts.map(s => s.trim())
 
     const date = leg.match_time ? leg.match_time.split('T')[0] : null
 
-    // If match_time is set and the match clearly hasn't finished yet, wait
     if (leg.match_time && new Date(leg.match_time).getTime() > Date.now() - 2 * 60 * 60 * 1000) {
       return 'pending'
     }
@@ -89,18 +128,7 @@ export async function verifyLeg(leg: {
     const fixture = await findFixture(home, away, date)
     if (!fixture) return 'unverifiable'
 
-    const status = fixture.fixture?.status?.short
-    if (!['FT','AET','PEN'].includes(status)) return 'pending'
-
-    const homeGoals  = fixture.goals?.home ?? 0
-    const awayGoals  = fixture.goals?.away ?? 0
-    const totalGoals = homeGoals + awayGoals
-    const htHome     = fixture.score?.halftime?.home ?? 0
-    const htAway     = fixture.score?.halftime?.away ?? 0
-
-    const pick = leg.pick.toLowerCase().trim()
-
-    return determineResult(pick, { homeGoals, awayGoals, totalGoals, htHome, htAway, home, away, fixture })
+    return verifyLegAgainstFixture(leg.pick, fixture)
   } catch (err) {
     console.error('verifyLeg error:', err)
     return 'unverifiable'
@@ -219,7 +247,7 @@ function determineResult(pick: string, data: {
 
 // ── BATCH VERIFY ALL LEGS OF A SLIP ──────────────────────────────
 export async function verifySlip(legs: {
-  id: string; match: string; pick: string; match_time: string | null
+  id: string; match: string; pick: string; match_time: string | null; fixture_id?: number | string | null
 }[]): Promise<{ id: string; result: VerifyResult }[]> {
   const results = await Promise.all(
     legs.map(async leg => ({
