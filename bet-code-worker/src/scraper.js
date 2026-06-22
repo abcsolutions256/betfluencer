@@ -49,7 +49,14 @@ export async function scrapeCode({ site, code }) {
   if (!code) throw new Error('Missing booking code')
 
   const browser = await getBrowser()
-  const page = await browser.newPage()
+  // Fresh, isolated context per scrape. Bookies persist the betslip in
+  // localStorage; a reused profile would carry the previous code's
+  // selections into the next request — hiding the empty-state booking-code
+  // input (it only renders when the slip is empty) and failing every
+  // subsequent scrape. An incognito context has its own storage, so each
+  // code starts from a clean slate.
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
   try {
     await page.setUserAgent(UA)
     await page.setViewport({ width: 1280, height: 900 })
@@ -68,6 +75,14 @@ export async function scrapeCode({ site, code }) {
       await page.goto(adapter.codeUrl(code), { waitUntil: 'networkidle2', timeout: NAV_TIMEOUT })
     } else {
       await page.goto(adapter.url, { waitUntil: 'networkidle2', timeout: NAV_TIMEOUT })
+      // Some bookies hide the booking-code field behind a toggle that must be
+      // clicked first (e.g. 1xBet/22Bet "Save/load events" reveals the
+      // coupon-code input). Click it before waiting for the input.
+      if (adapter.expandSelector) {
+        await page.waitForSelector(adapter.expandSelector, { timeout: NAV_TIMEOUT }).catch(() => {})
+        const toggle = await page.$(adapter.expandSelector)
+        if (toggle) { await toggle.click().catch(() => {}); await new Promise(r => setTimeout(r, 700)) }
+      }
       // Selector strings may be comma-separated lists — valid CSS that
       // querySelector / waitForSelector accept (first match wins).
       await page.waitForSelector(adapter.inputSelector, { timeout: NAV_TIMEOUT })
@@ -79,6 +94,12 @@ export async function scrapeCode({ site, code }) {
         else await page.keyboard.press('Enter')
       } else {
         await page.keyboard.press('Enter')
+      }
+      // Some bookies navigate/reload when applying the code (1xBet/22Bet Load
+      // reloads to render the coupon). Absorb that navigation so the later
+      // page.evaluate doesn't throw "Execution context was destroyed".
+      if (adapter.navigatesOnSubmit) {
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: NAV_TIMEOUT }).catch(() => {})
       }
     }
 
@@ -132,6 +153,7 @@ export async function scrapeCode({ site, code }) {
     throw err
   } finally {
     await page.close().catch(() => {})
+    await context.close().catch(() => {})
   }
 }
 

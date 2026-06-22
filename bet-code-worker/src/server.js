@@ -60,7 +60,10 @@ app.post('/verify', async (req, res) => {
 
   await acquire()
   try {
-    const result = await scrapeCode({ site: betting_site.toLowerCase(), code: booking_code.toLowerCase() })
+    // Preserve the code's case — some bookies (e.g. Betika "KkxPBu") use
+    // case-sensitive codes; lowercasing them would 404 the share URL. Only
+    // the site key is normalised (getAdapter lowercases it again anyway).
+    const result = await scrapeCode({ site: betting_site.toLowerCase(), code: String(booking_code).trim() })
     res.json({ ok: true, ...result, screenshot_url: shotUrl(req, result.screenshot) })
   } catch (e) {
     // Return 200 with ok:false so the caller can persist a 'failed' record.

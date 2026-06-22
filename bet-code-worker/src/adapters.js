@@ -18,11 +18,18 @@ export const adapters = {
   // ── 1xBet ── confirmed (code KSA6G was loaded in the capture) ───
   '1xbet': {
     name: '1xBet',
-    url: 'https://1xbet.ug/en/',
+    // /line/football reliably renders the betslip panel (the homepage shows a
+    // promo instead). The coupon-code input is hidden until "Save/load events"
+    // is clicked — expandSelector does that first (confirmed 2026-06-19).
+    url: 'https://1xbet.ug/en/line/football',
+    expandSelector: '.coupon-loader-toggle',
+    navigatesOnSubmit: true,                  // Load reloads the page to apply the coupon
     inputSelector:  'input.coupon-loader__input, input[placeholder="Event code" i]',
-    // Save + Load share a class; target Load (gray theme) specifically so
-    // we don't click Save and load an empty coupon.
-    submitSelector: '.coupon-loader__box button.ui-button--theme-gray.coupon-loader__button, .coupon-loader__box button:last-of-type',
+    // Save + Load share .coupon-loader__button; Save is theme-accent (green),
+    // Load is theme-gray. Target Load by theme so we don't re-Save. (They are
+    // NOT inside .coupon-loader__box; Load is disabled until a code is typed,
+    // which the scraper does before clicking — so it's enabled by click time.)
+    submitSelector: 'button.coupon-loader__button.ui-button--theme-gray',
     waitFor:        '.coupon-bets__items, li.coupon-bets__bet',
     resultSelector: '.coupon-bets__items, .coupon-bets',
     rowSelector:    'li.coupon-bets__bet, .coupon-bet--is-line',
@@ -53,21 +60,53 @@ export const adapters = {
     },
   },
 
-  // ── betPawa ── confirmed (code 1K1DRRH was loaded in the capture) ─
+  // ── betPawa ── confirmed 2026-06-19 (codes MZHM3IA single + V8V72AV combo loaded live) ─
+  // betPawa migrated its data-test-ids from camelCase → kebab-case
+  // (betslipGame→betslip-game, gameInfo→game-info, betChosen→bet-chosen),
+  // which broke the old selectors. Handles BOTH single bets (bet-chosen)
+  // and accumulator/combo bets (combo-legs holds the per-leg picks).
   betpawa: {
     name: 'betPawa',
     url: 'https://www.betpawa.ug/',
     inputSelector:  '#bookingCode, [data-test-id="bet-booking-code-input"]',
-    submitSelector: '[data-test-id="load-betslip"]', 
-    waitFor:        '[data-test-id="betslipGame"]',
-    resultSelector: '[data-test-id="betslipGame"]',
-    rowSelector:    '[data-test-id="betslipGame"]',
+    submitSelector: '[data-test-id="load-betslip"]',
+    waitFor:        '[data-test-id="betslip-game"]',
+    resultSelector: '[data-test-id="betslip-game"]',
+    rowSelector:    '[data-test-id="betslip-game"]',
     fields: {
-      teams:   '[data-test-id="gameInfo"] a span',
-      league:  '',                                // not in betPawa slip
-      market:  '[data-test-id="betChosen"] span', // "1X2 | Full Time - 1" (market+pick)
-      pick:    '[data-test-id="betChosen"] span',
-      kickoff: '',                                // not in betPawa slip
+      // eventTitleLink is the clean "Home - Away" (game-info also carries odds); CSS-module hash stripped via [class*=].
+      teams:   '[class*="eventTitleLink"], [data-test-id="game-info"]',
+      league:  '',                                       // not in betPawa slip
+      // single bet: bet-chosen = "1X2 | Full Time - 1". combo: combo-legs = all legs' markets+picks.
+      market:  '[data-test-id="bet-chosen"], [data-test-id="combo-legs"]',
+      pick:    '[data-test-id="bet-chosen"], [data-test-id="combo-legs"]',
+      kickoff: '',                                       // not in betPawa slip
+    },
+  },
+
+  // ── Betika ── confirmed 2026-06-19 (code KkxPBu loaded live, UG site) ─
+  // Betika has a first-class shared-betslip-code feature: the homepage
+  // right panel asks "Do you have a shared betslip code?" and a Share button
+  // produces /en-ug/share/<code>. The share URL auto-populates the betslip,
+  // so we load it directly (cleanest). Each selection is a `.stacked` row
+  // inside `.main-betslip`; `.stacked__link` = "Home Vs. Away",
+  // `.stacked__market--odd` = the pick (e.g. "Morocco").
+  betika: {
+    name: 'Betika',
+    url: 'https://www.betika.com/en-ug/',
+    codeUrl: (code) => `https://www.betika.com/en-ug/share/${encodeURIComponent(code)}`,
+    // Fallback loader (only used if codeUrl is removed): the shared-code box
+    // is shown when the betslip is empty; the button text is "Load Betslip".
+    inputSelector:  'input[placeholder*="VBmSU" i], input[placeholder*="betslip code" i], input[placeholder*="shared" i]',
+    waitFor:        '.main-betslip .stacked, .stacked',
+    resultSelector: '.main-betslip, .betslip-content, .betslip',
+    rowSelector:    '.main-betslip .stacked',
+    fields: {
+      teams:   '.stacked__link',
+      league:  '',                                 // not in betika slip
+      market:  '.stacked__market span:first-child',            // the pick, e.g. "Morocco"
+      pick:    '.stacked__market--odd',
+      kickoff: '',                                 // unclassed in slip
     },
   },
 
@@ -144,6 +183,20 @@ export const adapters = {
   },
 }
 
+// ── NOT SUPPORTED (investigated 2026-06-19) ──────────────────────
+// These UG bookies have NO public "load a shared booking code → see the
+// selections" flow, so the worker can't verify them. Deliberately omitted
+// from `adapters` so /verify returns a clear "unsupported site" rather than
+// silently failing. Re-evaluate only if they ship a pin-less share-code:
+//   • Fortebet (fortebet.ug) — "SAVE i-TICKET" yields a short numeric code
+//     (e.g. "112") meant to be taken to a counter ("report at the counter"),
+//     valid ~30 min, and NOT loadable online. The public "Ticket search"
+//     rejects it: "The ticket number is at least 14 digits" — it only checks
+//     already-placed 14-digit tickets, which need a real (paid) bet.
+//   • Championbet (championbet.ug) — "Ticket status" requires Ticket code +
+//     PIN (a placed-ticket receipt); there is no public "book bet" that mints
+//     a pin-less, shareable code others can load.
+
 // Normalise a betting-site name (e.g. "Sporty Bet", "1xBet", "22 Bet") to an adapter.
 export function getAdapter(site) {
   if (!site) return null
@@ -154,6 +207,7 @@ export function getAdapter(site) {
     '1xbet':   '1xbet', onexbet: '1xbet',
     '22bet':   '22bet', twentytwobet: '22bet',
     betpawa:   'betpawa', pawa: 'betpawa',
+    betika:    'betika',
     sportpesa: 'sportpesa', pesa: 'sportpesa',
     mozzart:   'mozzart', mozzartbet: 'mozzart',
   }
