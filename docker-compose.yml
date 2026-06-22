@@ -80,6 +80,9 @@ services:
       MAX_CONCURRENT: ${WORKER_MAX_CONCURRENT:-2}
       SCREENSHOT_TTL_HOURS: ${SCREENSHOT_TTL_HOURS:-48}
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      # Gemini response normalisation. GEMINI_API_KEY comes from .env via
+      # env_file above; unset it to disable normalisation entirely.
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite}
     volumes:
       - ./bet-code-worker/src:/app/src       # hot-reload the scraper source
       - screenshots:/app/screenshots

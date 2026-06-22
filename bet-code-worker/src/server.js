@@ -1,6 +1,11 @@
 // ── Bet-code worker API ───────────────────────────────────────────
 // POST /verify { betting_site, booking_code } → scrape the loaded slip
-//   → { ok, site, code, matches:[{teams,league,market,pick,kickoff}], raw_text, count }
+//   → { ok, site, code, found, matches:[{teams,league,market,pick,kickoff}],
+//       raw_text, count, screenshot_url,
+//       normalized:[{teams,homeTeam,awayTeam,market,marketLabel,pickSymbol,
+//                    pickSide,pickTeam,line,odds,kickoff,kickoffRaw,summary}],
+//       totalOdds, summary }   ← normalized/summary added by Gemini when
+//   GEMINI_API_KEY is set and the code is valid (see normalize.js). Best-effort.
 // GET  /health → { ok }
 //
 // Auth: send `x-worker-key: <WORKER_API_KEY>`. Keep this service private
@@ -10,6 +15,7 @@
 import express from 'express'
 import { scrapeCode, shutdown, SHOT_DIR } from './scraper.js'
 import { getAdapter, supportedSites } from './adapters.js'
+import { normalizeSlip, normaliseEnabled } from './normalize.js'
 
 const app     = express()
 const API_KEY = process.env.WORKER_API_KEY || ''
@@ -64,7 +70,21 @@ app.post('/verify', async (req, res) => {
     // case-sensitive codes; lowercasing them would 404 the share URL. Only
     // the site key is normalised (getAdapter lowercases it again anyway).
     const result = await scrapeCode({ site: betting_site.toLowerCase(), code: String(booking_code).trim() })
-    res.json({ ok: true, ...result, screenshot_url: shotUrl(req, result.screenshot) })
+
+    // Gemini normalisation: rewrite the messy scraped selections into a clean
+    // machine-readable shape (canonical market, pick symbol 1/X/2, side, ISO
+    // kickoff) + summaries. Best-effort: only for valid coded slips, and any
+    // failure (no key, timeout, bad response) leaves /verify's contract intact.
+    let enrich = {}
+    if (result.found && normaliseEnabled()) {
+      try {
+        enrich = await normalizeSlip(result)
+      } catch (e) {
+        console.error('[normalize] skipped:', e?.message)
+      }
+    }
+
+    res.json({ ok: true, ...result, ...enrich, screenshot_url: shotUrl(req, result.screenshot) })
   } catch (e) {
     // Return 200 with ok:false so the caller can persist a 'failed' record.
     res.json({ ok: false, betting_site, booking_code, error: e?.message || 'scrape failed', matches: [], raw_text: '', count: 0, screenshot_url: shotUrl(req, e?.screenshot) })
