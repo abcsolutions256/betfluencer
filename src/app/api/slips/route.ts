@@ -3,7 +3,7 @@
 // / betslip_legs); buyers fetch them post-purchase via /api/slips/[id]/reveal.
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { isSlipExpired } from '@/lib/slipStatus'
+import { fetchHiddenSlipIds } from '@/lib/slipStatus'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,8 +18,9 @@ export async function GET() {
 
   if (error) return NextResponse.json({ slips: [] })
 
+  const hidden = await fetchHiddenSlipIds(db)   // admin-hidden slips (best-effort)
   const formatted = (slips ?? [])
-    .filter((s: any) => !isSlipExpired(s))   // hide slips whose first match kicked off >90 min ago
+    .filter((s: any) => !hidden.has(s.id))      // show ALL verified slips except admin-hidden ones
     .map((s: any) => ({
     slip: {
       ...s,

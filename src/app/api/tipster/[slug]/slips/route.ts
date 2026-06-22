@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getSessionUser } from '@/lib/auth/session'
-import { isSlipExpired } from '@/lib/slipStatus'
+import { fetchHiddenSlipIds } from '@/lib/slipStatus'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +31,7 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
 
   const { data } = await q
   let slips = (data ?? []) as any[]
+  const hidden = await fetchHiddenSlipIds(db)   // admin-hidden slips (best-effort)
 
   // Owner-only: attach the secret content (code/site) + the Gemini-verified
   // picks so the tipster can see exactly what they posted. Same data a buyer
@@ -45,6 +46,7 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
     const ver = new Map((verifs ?? []).map((v: any) => [v.betslip_id, v]))
     slips = slips.map((s) => ({
       ...s,
+      hidden:         hidden.has(s.id),              // admin-removed → owner sees a "Hidden" tag
       booking_code:   sec.get(s.id)?.booking_code   ?? null,
       betting_site:   sec.get(s.id)?.betting_site   ?? null,
       slip_image_url: sec.get(s.id)?.slip_image_url ?? null,
@@ -52,8 +54,8 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
       slip_summary:   ver.get(s.id)?.summary        ?? null,
     }))
   } else if (!owner) {
-    // Public channel view: same rule as the homepage — hide expired slips.
-    slips = slips.filter((s) => !isSlipExpired(s))
+    // Public channel view: same rule as the homepage — show all except admin-hidden.
+    slips = slips.filter((s) => !hidden.has(s.id))
   }
 
   return NextResponse.json({ slips })

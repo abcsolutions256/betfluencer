@@ -2,13 +2,13 @@
 import { useState, useEffect } from 'react'
 import {
   Shield, Home, Users, BarChart2, ShieldCheck,
-  Loader2, LogOut, CheckCircle, Receipt
+  Loader2, LogOut, CheckCircle, Receipt, Eye, EyeOff
 } from 'lucide-react'
 import type { TransactionRow, TxnStatus } from '@/types/payments'
 
 const SESSION_KEY = 'bf_admin_session'
 
-type AdminTab = 'overview' | 'ads' | 'tipsters' | 'revenue' | 'review' | 'transactions'
+type AdminTab = 'overview' | 'ads' | 'tipsters' | 'revenue' | 'review' | 'transactions' | 'slips'
 
 // ── LOGIN ─────────────────────────────────────────────────────────
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
@@ -525,6 +525,60 @@ function TxnField({ label, value, mono, capitalize, span2 }: { label: string; va
   )
 }
 
+// ── SLIPS (moderation) ────────────────────────────────────────────
+// All slips are shown on the marketplace by default; hide a stale/expired one
+// here to pull it (kickoff times aren't reliable across bookies, so removal is
+// manual). Hidden slips stay on the tipster's own dashboard, tagged "Hidden".
+function SlipsTab({ token }: { token: string }) {
+  const [slips, setSlips]     = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy]       = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/admin/slips', { headers: { 'x-admin-token': token } })
+      .then(r => r.json()).then(d => setSlips(d.slips ?? [])).catch(() => {}).finally(() => setLoading(false))
+  }, [token])
+
+  async function toggle(id: string, hidden: boolean) {
+    setBusy(id)
+    const r = await fetch('/api/admin/slips', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+      body: JSON.stringify({ betslip_id: id, hidden }),
+    })
+    if (r.ok) setSlips(s => s.map(x => x.id === id ? { ...x, hidden } : x))
+    setBusy(null)
+  }
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)' }}><Loader2 size={18} className="spin" /></div>
+  if (!slips.length) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>No slips yet</div>
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
+        Hide a slip to remove it from the customer marketplace (e.g. its games have already kicked off). It stays on the tipster&apos;s dashboard.
+      </div>
+      {slips.map(s => {
+        const ko = s.earliest_kickoff ? new Date(s.earliest_kickoff).toLocaleString('en-UG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
+        return (
+          <div key={s.id} className="card" style={{ padding: '12px 14px', marginBottom: 8, opacity: s.hidden ? 0.55 : 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)' }}>{s.tipsters?.name ?? 'Unknown'} · ×{s.total_odds ?? '—'}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{s.game_count ?? '?'} games · {(s.markets ?? []).join(', ') || '—'} · {s.verification_status}</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>KO {ko} · result {s.result}</div>
+              </div>
+              <button onClick={() => toggle(s.id, !s.hidden)} disabled={busy === s.id}
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '7px 11px', borderRadius: 9, border: '1px solid var(--line)', background: s.hidden ? 'var(--gold-lt)' : 'none', color: s.hidden ? 'var(--gold)' : 'var(--muted)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                {busy === s.id ? <Loader2 size={13} className="spin" /> : (s.hidden ? <><Eye size={13} /> Show</> : <><EyeOff size={13} /> Hide</>)}
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── MAIN ADMIN PANEL ──────────────────────────────────────────────
 export default function AdminPage() {
   const [authed,   setAuthed]   = useState(false)
@@ -583,6 +637,7 @@ export default function AdminPage() {
         {([
           { key: 'overview',     icon: Home,        label: 'Overview' },
           { key: 'tipsters',     icon: Users,        label: 'Tipsters' },
+          { key: 'slips',        icon: EyeOff,       label: 'Slips'    },
           { key: 'transactions', icon: Receipt,      label: 'Txns'     },
           { key: 'revenue',      icon: BarChart2,    label: 'Revenue'  },
           { key: 'review',       icon: ShieldCheck,  label: 'Review'   },
@@ -634,6 +689,11 @@ export default function AdminPage() {
         {/* ── TIPSTERS ── */}
         {tab === 'tipsters' && (
           <TipstersTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
+        )}
+
+        {/* ── SLIPS ── */}
+        {tab === 'slips' && (
+          <SlipsTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
         )}
 
         {/* ── TRANSACTIONS ── */}

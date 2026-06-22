@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Betfluencer — End-to-End Testing Guide</title>
+<style>
+  :root{
+    --ink:#16271c; --gold:#c98a10; --gold-bg:#fdf6e6; --green:#1e8a52;
+    --muted:#5b6b60; --line:#dfe6e0; --card:#f6f9f6;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  body{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       color:#1c2a22; line-height:1.5; font-size:12.5px; margin:0;}
+  h1{font-size:30px; margin:0 0 4px; color:var(--ink); letter-spacing:-.5px;}
+  h2{font-size:13px; text-transform:uppercase; letter-spacing:1.5px; color:var(--gold); margin:0 0 2px;}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 18px;}
+  .cover{padding:46px 48px 30px; border-bottom:3px solid var(--gold);}
+  .brand{font-size:22px; font-weight:800; margin-bottom:18px;}
+  .brand .b{color:var(--gold);}
+  .wrap{padding:24px 48px 48px;}
+  .meta{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;}
+  .pill{background:var(--gold-bg); color:var(--gold); border:1px solid #f0e2bf;
+        border-radius:20px; padding:4px 12px; font-size:11px; font-weight:700;}
+  .note{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--gold);
+        border-radius:8px; padding:12px 16px; margin:14px 0; font-size:12px;}
+  .note b{color:var(--ink);}
+  .step{border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin:16px 0;
+        page-break-inside:avoid; background:#fff;}
+  .step-head{display:flex; align-items:center; gap:12px; margin-bottom:10px;}
+  .num{flex:0 0 auto; width:30px; height:30px; border-radius:50%; background:var(--ink); color:#fff;
+       font-weight:800; font-size:14px; display:flex; align-items:center; justify-content:center;}
+  .step-title{font-size:16px; font-weight:800; color:var(--ink);}
+  ol.do, ul.do{margin:6px 0 10px; padding-left:20px;}
+  ol.do li, ul.do li{margin:4px 0;}
+  code{background:#eef3ee; border:1px solid #dde7de; border-radius:5px; padding:1px 6px;
+       font-family:"SF Mono",Menlo,Consolas,monospace; font-size:11.5px; color:#0c5a31;}
+  .val{font-weight:800; color:var(--ink);}
+  .expect{background:#eef7f0; border:1px solid #cfe7d6; border-radius:8px; padding:9px 13px;
+          font-size:11.5px; margin-top:8px;}
+  .expect b{color:var(--green);}
+  figure{margin:12px 0 4px; text-align:center;}
+  figure img{max-height:430px; max-width:300px; border:1px solid var(--line); border-radius:12px;
+             box-shadow:0 2px 10px rgba(0,0,0,.08);}
+  figcaption{font-size:10.5px; color:var(--muted); margin-top:6px;}
+  .ph{border:2px dashed var(--gold); border-radius:12px; background:var(--gold-bg);
+      padding:22px 18px; text-align:center; margin:12px auto 4px; max-width:340px;}
+  .ph .cam{font-size:24px;}
+  .ph .lbl{font-weight:800; color:var(--gold); margin:6px 0 4px; font-size:13px;}
+  .ph .desc{font-size:11px; color:#7a6a3a;}
+  table.data{width:100%; border-collapse:collapse; margin:8px 0 4px; font-size:12px;}
+  table.data th, table.data td{border:1px solid var(--line); padding:8px 11px; text-align:left;}
+  table.data th{background:var(--card); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted);}
+  .sectionbreak{page-break-before:always;}
+  .foot{margin-top:24px; padding-top:12px; border-top:1px solid var(--line); color:var(--muted); font-size:10.5px;}
+  .two{display:flex; gap:16px; align-items:flex-start;}
+  .two .col{flex:1;}
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand"><span class="b">bet</span>fluencer</div>
+  <h2>QA / Test Walkthrough</h2>
+  <h1>End-to-End Testing Guide</h1>
+  <p class="sub">Tipster posts a verified booking-code slip → customer buys it over Mobile Money → admin reviews. Follow the steps in order.</p>
+  <div class="meta">
+    <span class="pill">Mobile-first PWA</span>
+    <span class="pill">App: https://betfluencer.apps.katumbapaul.com</span>
+    <span class="pill">Pay-per-slip · UGX</span>
+    <span class="pill">~10 min</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="note">
+    <b>Before you start.</b> Make sure all three services are running: the <b>web app</b> (betfluencer.apps.katumbapaul.com), the
+    <b>bet-code worker</b> (verifies booking codes), and ideally the <b>sync</b> poller. Payments run in
+    <b>ioTec demo mode</b> when no live ioTec keys are set — the MoMo charge auto-succeeds with no real money moving.
+    With live keys, an STK push is sent to the phone and must be approved on the handset.
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="step">
+    <div class="step-head"><div class="num">1</div><div class="step-title">Open the marketplace</div></div>
+    <ol class="do">
+      <li>Go to <code>https://betfluencer.apps.katumbapaul.com</code>.</li>
+      <li>The bottom tab <b>Slips</b> shows the <b>Marketplace → Verified slips</b>.</li>
+    </ol>
+    <div class="expect"><b>Expected:</b> only <b>verified, non-expired</b> slips are listed. Each card shows a
+      <b>✓ Verified</b> badge, the game count, market types (e.g. <code>1X2</code>), total odds and price — but the
+      booking code and the actual picks are hidden until purchase.</div>
+    <figure><img src="testing-screenshots/01-home-marketplace.png"><figcaption>Step 1 — Marketplace (verified slips only)</figcaption></figure>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="step">
+    <div class="step-head"><div class="num">2</div><div class="step-title">Create a tipster account</div></div>
+    <ol class="do">
+      <li>Tap <b>Tipster</b> (bottom-right) → <b>Sign up</b>, or go to <code>/tipster/signup</code>.</li>
+      <li>Fill the form, e.g.:
+        <ul class="do">
+          <li>Display name: <span class="val">Test Tipster</span></li>
+          <li>Email: <span class="val">test-tipster+1@example.com</span></li>
+          <li>Password: <span class="val">min 6 chars</span></li>
+          <li>Username: <span class="val">testtipster</span> (public handle)</li>
+          <li>Payout Mobile Money number: <span class="val">0700000001</span> (this is where sales are paid out, 90%)</li>
+          <li>Sport / leagues + short bio (optional)</li>
+        </ul>
+      </li>
+      <li>Tap <b>Create tipster account</b>.</li>
+    </ol>
+    <div class="expect"><b>Expected:</b> account is created and you land on the <b>Tipster Dashboard</b> (Home / Post tip / My Slips / Earnings / Stats / Profile).</div>
+    <figure><img src="testing-screenshots/02-tipster-signup.png"><figcaption>Step 2 — Tipster signup form</figcaption></figure>
+    <div class="ph"><div class="cam">📷</div><div class="lbl">SCREENSHOT: Tipster dashboard (after signup)</div>
+      <div class="desc">Header "TIPSTER DASHBOARD · Test Tipster" with the Home/Post&nbsp;tip/My&nbsp;Slips/Earnings/Stats/Profile tabs.</div></div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="step">
+    <div class="step-head"><div class="num">3</div><div class="step-title">Post a tip — booking code XMRH5 (22Bet)</div></div>
+    <ol class="do">
+      <li>On the dashboard open the <b>Post tip</b> tab.</li>
+      <li>Choose the <b>Booking Code</b> method.</li>
+      <li>Pick the betting site: <span class="val">22Bet</span>.</li>
+      <li>Enter the booking code: <code>XMRH5</code>.</li>
+      <li>Set a price (default <span class="val">UGX 1,000</span>). Total odds is optional — it is filled automatically after verification.</li>
+      <li>Tap <b>Post</b>.</li>
+    </ol>
+    <div class="expect"><b>Expected:</b> the slip is created immediately and appears under <b>My Slips</b> with the status
+      <b>⏳ Verifying…</b>. The booking code/site are stored privately; the slip is <b>not</b> on the marketplace yet.</div>
+    <div class="ph"><div class="cam">📷</div><div class="lbl">SCREENSHOT: Post-tip form (22Bet + XMRH5) and/or My Slips showing "⏳ Verifying…"</div>
+      <div class="desc">Site = 22Bet selected, code XMRH5 entered; after posting, the My Slips card shows the "⏳ Verifying…" badge.</div></div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="step">
+    <div class="step-head"><div class="num">4</div><div class="step-title">Wait ~2 minutes for verification</div></div>
+    <ol class="do">
+      <li>Behind the scenes the <b>bet-code worker</b> loads <code>XMRH5</code> on 22Bet, scrapes the selections, and
+        a model normalises them (market, pick 1/X/2, kickoff).</li>
+      <li>Refresh <b>My Slips</b> after ~1–2 minutes.</li>
+    </ol>
+    <div class="expect"><b>Expected:</b> the badge flips to <b>✓ Verified</b>. As the owner you now see the full content:
+      <b>betting site, the booking code, each match, market (e.g. 1X2), the pick (1 / X / 2 + team), odds and kickoff</b>.
+      If the code is invalid the badge shows <b>✗ Unverified</b>; if the worker is unreachable it stays <b>⏳ Verifying…</b>
+      and the sync poller retries.</div>
+    <div class="ph"><div class="cam">📷</div><div class="lbl">SCREENSHOT: My Slips — verified slip with full picks</div>
+      <div class="desc">"22Bet · N legs · ×odds", Code: XMRH5, ✓ Verified badge, and each leg's teams / market / pick / kickoff.</div></div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="step">
+    <div class="step-head"><div class="num">5</div><div class="step-title">Confirm it on the customer marketplace</div></div>
+    <ol class="do">
+      <li>Open the <b>Slips</b> tab (home marketplace) — log out of the tipster first, or use another browser/incognito to view as a customer.</li>
+    </ol>
+    <div class="expect"><b>Expected:</b> the now-verified slip appears in the public marketplace with a <b>✓ Verified</b>
+      badge and proof (games, markets, odds, price) — but the <b>code and picks stay hidden</b> behind the Buy button.
+      (Same card layout as Step 1.)</div>
+  </div>
+
+  <!-- STEP 6 -->
+  <div class="step">
+    <div class="step-head"><div class="num">6</div><div class="step-title">Create a customer (buyer) account</div></div>
+    <ol class="do">
+      <li>Go to <code>/signup</code> (or the profile icon → Sign up).</li>
+      <li>Register a buyer, e.g. email <span class="val">test-buyer+1@example.com</span>, password (min 6).</li>
+    </ol>
+    <div class="expect"><b>Expected:</b> you're logged in as a normal user and returned to the marketplace.</div>
+    <figure><img src="testing-screenshots/07-user-signup.png"><figcaption>Step 6 — Customer signup</figcaption></figure>
+  </div>
+
+  <!-- STEP 7 -->
+  <div class="step">
+    <div class="step-head"><div class="num">7</div><div class="step-title">Buy the slip over Mobile Money</div></div>
+    <ol class="do">
+      <li>On the verified slip card, tap <b>Buy slip → UGX 1,000</b>.</li>
+      <li>In the payment sheet enter the phone number <code>0111777777</code>.</li>
+      <li>Select <b>MTN Mobile Money</b>.</li>
+      <li>Confirm/Pay. <b>Demo mode:</b> the charge auto-succeeds. <b>Live mode:</b> approve the STK push prompt on the phone.</li>
+    </ol>
+    <div class="expect"><b>Expected:</b> the payment sheet shows <b>Pending → Success</b>, the slip <b>unlocks</b>, and the
+      <b>booking code + picks</b> are revealed (via the gated reveal endpoint). The sale is recorded; the tipster gets 90% instantly, platform keeps 10%.</div>
+    <div class="ph"><div class="cam">📷</div><div class="lbl">SCREENSHOT: Payment sheet (phone 0111777777, MTN) → Success</div>
+      <div class="desc">Bottom payment sheet with the phone entered and MTN selected; then the success / unlocked state.</div></div>
+    <div class="ph"><div class="cam">📷</div><div class="lbl">SCREENSHOT: Unlocked slip (code + picks revealed)</div>
+      <div class="desc">After payment: booking code XMRH5, betting site, and the full picks shown to the buyer.</div></div>
+  </div>
+
+  <!-- STEP 8 -->
+  <div class="step">
+    <div class="step-head"><div class="num">8</div><div class="step-title">Review in the Admin dashboard</div></div>
+    <ol class="do">
+      <li>Log out, then log in as the admin at <code>/login</code> with:
+        <ul class="do">
+          <li>Email: <code>jonathanpkatumba+123@gmail.com</code></li>
+          <li>Password: <code>6Prayers</code></li>
+        </ul>
+      </li>
+      <li>Open <code>/admin</code>.</li>
+    </ol>
+    <div class="expect"><b>Expected:</b> the admin dashboard loads with platform stats and the <b>Transactions</b> tab showing
+      the collection (the buyer's UGX 1,000) and the payout to the tipster, plus recent activity.</div>
+    <figure><img src="testing-screenshots/08-user-login.png"><figcaption>Step 8 — Login screen (used for the admin sign-in)</figcaption></figure>
+    <div class="ph"><div class="cam">📷</div><div class="lbl">SCREENSHOT: Admin dashboard / Transactions tab</div>
+      <div class="desc">Stats (tipsters, purchases, commission) and the Transactions ledger with the test purchase + payout.</div></div>
+  </div>
+
+  <!-- TEST DATA -->
+  <div class="sectionbreak"></div>
+  <h2>Reference</h2>
+  <h1 style="font-size:20px; margin-bottom:12px;">Test data &amp; troubleshooting</h1>
+
+  <table class="data">
+    <tr><th>What</th><th>Value</th></tr>
+    <tr><td>App URL</td><td><code>https://betfluencer.apps.katumbapaul.com</code></td></tr>
+    <tr><td>Booking code / site</td><td><code>XMRH5</code> on <b>22Bet</b></td></tr>
+    <tr><td>Buyer MoMo phone</td><td><code>0111777777</code> · <b>MTN Mobile Money</b></td></tr>
+    <tr><td>Admin login</td><td><code>jonathanpkatumba+123@gmail.com</code> / <code>6Prayers</code></td></tr>
+    <tr><td>Example tipster</td><td>test-tipster+1@example.com · username <b>testtipster</b> · payout 0700000001</td></tr>
+    <tr><td>Example buyer</td><td>test-buyer+1@example.com</td></tr>
+    <tr><td>Default slip price</td><td>UGX 1,000 (platform commission 10%)</td></tr>
+  </table>
+
+  <div class="note"><b>Verification takes time.</b> Loading a code on a live bookie takes a few seconds to ~2 minutes.
+    If a slip is stuck on <b>⏳ Verifying…</b>, the worker may be down or the code expired — the sync poller re-checks pending coded slips on its interval.</div>
+
+  <div class="note"><b>Slips disappear from the marketplace when expired.</b> Once a slip's earliest match has kicked off by
+    more than <b>90 minutes</b>, it drops off the customer marketplace and tipster channels (no longer buyable). The owning
+    tipster still sees it on their own dashboard, tagged <b>Expired</b>.</div>
+
+  <div class="note"><b>Payments.</b> In <b>demo mode</b> (no ioTec keys) the MoMo charge auto-resolves to success — ideal for
+    testing the unlock + payout flow without real money. In <b>live mode</b>, the buyer approves an STK push on the phone;
+    the webhook (or status poll) confirms before the slip unlocks and the tipster is paid.</div>
+
+  <div class="foot">
+    The two-frame icons (📷) mark screenshots to capture during the run (logged-in screens) and paste in.
+    Public-page screenshots are already embedded. Betfluencer — internal QA walkthrough.
+  </div>
+
+</div>
+</body>
+</html>

@@ -7,7 +7,6 @@ import { ImageUpload } from '@/components/ui/ImageUpload'
 import type { Tipster } from '@/types'
 import type { SlipLeg } from '@/types/betslip'
 import { BETTING_SITES } from '@/lib/bettingSites'
-import { isSlipExpired } from '@/lib/slipStatus'
 
 type DTab = 'home'|'post'|'myslips'|'earn'|'stats'|'profile'
 
@@ -293,7 +292,7 @@ export default function TipsterDashboard() {
                   </div>
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5 }}>
                     {b.posting_mode === 'booking_code' && <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, color:v.color, background:v.bg, whiteSpace:'nowrap' }}>{v.label}</span>}
-                    {isSlipExpired(b) && <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, color:'var(--muted)', background:'rgba(255,255,255,0.06)', whiteSpace:'nowrap' }}>Expired</span>}
+                    {b.hidden && <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, color:'var(--red)', background:'rgba(229,72,77,0.12)', whiteSpace:'nowrap' }}>Hidden by admin</span>}
                     <ResultPill result={b.result as any} />
                   </div>
                 </div>
