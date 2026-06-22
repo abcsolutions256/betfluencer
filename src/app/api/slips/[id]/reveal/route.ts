@@ -37,7 +37,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const [{ data: secret }, { data: legs }, { data: verif }] = await Promise.all([
     db.from('betslip_secrets').select('booking_code, betting_site, slip_image_url').eq('betslip_id', slipId).maybeSingle(),
     db.from('betslip_legs').select('match, league, pick, odds, match_time, result').eq('betslip_id', slipId),
-    db.from('slip_verifications').select('matches, raw_text').eq('betslip_id', slipId).maybeSingle(),
+    db.from('slip_verifications').select('matches, raw_text, normalized, summary, total_odds').eq('betslip_id', slipId).maybeSingle(),
   ])
 
   return NextResponse.json({
@@ -46,5 +46,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     slip_image_url: secret?.slip_image_url ?? null,
     legs:           legs ?? [],
     matches:        verif?.matches ?? [],
+    // Gemini-normalised picks (team, market, 1/X/2, kickoff, odds) + summary —
+    // the clean, structured version of what the buyer just unlocked.
+    normalized:     verif?.normalized ?? [],
+    summary:        verif?.summary    ?? null,
+    total_odds:     verif?.total_odds ?? null,
   })
 }

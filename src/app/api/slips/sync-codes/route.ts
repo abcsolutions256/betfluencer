@@ -19,20 +19,23 @@ async function handler(req: NextRequest) {
   const db    = supabaseServer()
   const batch = Number(process.env.SYNC_BATCH ?? 20)
 
-  // Pending slips that carry a booking code are the live, verifiable product.
-  const { data: slips } = await db
-    .from('betslips')
-    .select('id, betting_site, booking_code')
+  // The booking code + site live in betslip_secrets (service-role only) — NOT
+  // on betslips (the overhaul moved them). Join betslips to re-verify only
+  // slips whose match hasn't finished yet (result 'pending'): the live,
+  // verifiable product. This keeps verified slips fresh and recovers any that
+  // are still 'pending' (e.g. the worker was down when first posted).
+  const { data: rows } = await db
+    .from('betslip_secrets')
+    .select('betslip_id, betting_site, booking_code, betslips!inner(result)')
     .not('booking_code', 'is', null)
     .neq('booking_code', '')
-    .eq('result', 'pending')
-    .order('posted_at', { ascending: false })
+    .eq('betslips.result', 'pending')
     .limit(batch)
 
   let processed = 0, found = 0
-  for (const s of slips ?? []) {
+  for (const s of rows ?? []) {
     if (!s.betting_site || !s.booking_code) continue
-    const r = await verifyAndRecord(s.id, s.betting_site, s.booking_code)
+    const r = await verifyAndRecord(s.betslip_id, s.betting_site, s.booking_code)
     processed++
     if (r?.found) found++
   }

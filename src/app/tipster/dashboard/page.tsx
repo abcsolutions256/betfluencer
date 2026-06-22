@@ -6,8 +6,18 @@ import { ResultPill } from '@/components/ui'
 import { ImageUpload } from '@/components/ui/ImageUpload'
 import type { Tipster } from '@/types'
 import type { SlipLeg } from '@/types/betslip'
+import { BETTING_SITES } from '@/lib/bettingSites'
+import { isSlipExpired } from '@/lib/slipStatus'
 
 type DTab = 'home'|'post'|'myslips'|'earn'|'stats'|'profile'
+
+// Verification-status badge styling (booking-code slips).
+const VERIF: Record<string, { label: string; color: string; bg: string }> = {
+  verified: { label: '✓ Verified',   color: 'var(--green)', bg: 'var(--green-lt)' },
+  pending:  { label: '⏳ Verifying…', color: 'var(--gold)',  bg: 'var(--gold-lt)' },
+  failed:   { label: '✗ Unverified',  color: 'var(--red)',   bg: 'rgba(229,72,77,0.12)' },
+  rejected: { label: '✗ Rejected',    color: 'var(--red)',   bg: 'rgba(229,72,77,0.12)' },
+}
 
 type Stats = {
   subscriber_count: number
@@ -233,7 +243,7 @@ export default function TipsterDashboard() {
                     </div>
                     <label className="lbl">Betting site</label>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:10 }}>
-                      {['BetPawa','Betway','SportPesa','Mozzart','1xBet','Other'].map(site => (
+                      {BETTING_SITES.map(site => (
                         <button key={site} type="button" onClick={() => setSlips(s => s.map((sl,i)=>i===si?{...sl,betting_site:site}:sl))} style={{ padding:'8px 4px', borderRadius:10, border:slip.betting_site===site?'2px solid var(--gold)':'1px solid var(--line)', background:slip.betting_site===site?'var(--gold-lt)':'var(--bg3)', color:slip.betting_site===site?'var(--gold)':'var(--offwhite)', fontSize:11, fontWeight:slip.betting_site===site?700:500, cursor:'pointer' }}>{site}</button>
                       ))}
                     </div>
@@ -269,18 +279,44 @@ export default function TipsterDashboard() {
           <div>
             <div style={{ fontSize:16, fontWeight:800, color:'var(--white)', marginBottom:14 }}>My slips</div>
             {betslips.length === 0 && <div style={{ fontSize:13, color:'var(--muted)', textAlign:'center', padding:'40px 0' }}>No slips posted yet</div>}
-            {betslips.map(b => (
+            {betslips.map((b: any) => {
+              const norm: any[] = Array.isArray(b.normalized) ? b.normalized : []
+              const v = VERIF[b.verification_status as string] || VERIF.pending
+              const fmtKO = (iso?: string) => iso ? new Date(iso).toLocaleString('en-UG', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : ''
+              return (
               <div key={b.id} className="card" style={{ marginBottom:8, borderLeft:`3px solid ${b.result==='win'?'var(--green)':b.result==='loss'?'var(--red)':'var(--line)'}` }}>
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center" style={{ marginBottom: norm.length ? 10 : 0 }}>
                   <div>
-                    <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site || (b.locked ? 'Slip' : '—')} · {b.leg_count} legs · ×{b.total_odds}</div>
-                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700 }}>{b.booking_code || (b.locked ? '🔒 hidden until sold' : '—')}</span> · UGX {(b.slip_price||0).toLocaleString()}</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site || 'Slip'} · {b.leg_count ?? b.game_count ?? norm.length} legs · ×{b.total_odds ?? '—'}</div>
+                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700, letterSpacing:1 }}>{b.booking_code || '—'}</span> · UGX {(b.slip_price||0).toLocaleString()}</div>
                     <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>{b.posted_at ? new Date(b.posted_at).toLocaleDateString() : ''}</div>
                   </div>
-                  <ResultPill result={b.result as any} />
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5 }}>
+                    {b.posting_mode === 'booking_code' && <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, color:v.color, background:v.bg, whiteSpace:'nowrap' }}>{v.label}</span>}
+                    {isSlipExpired(b) && <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, color:'var(--muted)', background:'rgba(255,255,255,0.06)', whiteSpace:'nowrap' }}>Expired</span>}
+                    <ResultPill result={b.result as any} />
+                  </div>
                 </div>
+                {/* Owner-only: the verified picks (markets, teams, 1/X/2, kickoff). */}
+                {norm.length > 0 && (
+                  <div style={{ borderTop:'1px solid var(--line)', paddingTop:8, display:'flex', flexDirection:'column', gap:7 }}>
+                    {norm.map((leg, i) => (
+                      <div key={i} style={{ fontSize:11.5, lineHeight:1.45 }}>
+                        <div style={{ color:'var(--white)', fontWeight:700 }}>{leg.teams || `${leg.homeTeam ?? '?'} vs ${leg.awayTeam ?? '?'}`}</div>
+                        <div style={{ color:'var(--muted)' }}>
+                          <span style={{ color:'var(--gold)', fontWeight:700 }}>{leg.marketLabel || leg.market || '—'}</span>
+                          {' · pick '}<span style={{ color:'var(--green)', fontWeight:800 }}>{leg.pickSymbol ?? '—'}</span>
+                          {leg.pickTeam ? ` (${leg.pickTeam})` : ''}
+                          {leg.odds ? ` · @${leg.odds}` : ''}
+                          {leg.kickoff ? ` · ${fmtKO(leg.kickoff)}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                    {b.slip_summary && <div style={{ fontSize:10.5, color:'var(--muted)', fontStyle:'italic', marginTop:1 }}>{b.slip_summary}</div>}
+                  </div>
+                )}
               </div>
-            ))}
+            )})}
           </div>
         )}
 

@@ -15,15 +15,17 @@ export async function GET(req: NextRequest) {
 
   const commission = (earnings ?? []).reduce((s: number, e: any) => s + (e.commission ?? 0), 0)
 
+  // slip_purchases' timestamp is purchased_at, not created_at (selecting/
+  // ordering by a non-existent column errors the whole query → empty activity).
   const { data: recentPurchases } = await db
     .from('slip_purchases')
-    .select('created_at, tipsters(name)')
-    .order('created_at', { ascending: false })
+    .select('purchased_at, tipsters(name)')
+    .order('purchased_at', { ascending: false })
     .limit(5)
 
   const activity = (recentPurchases ?? []).map((p: any) => ({
     text: `New purchase — ${p.tipsters?.name ?? 'Unknown'} slip`,
-    time: new Date(p.created_at).toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit' })
+    time: new Date(p.purchased_at).toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit' })
   }))
 
   return NextResponse.json({
