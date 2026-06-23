@@ -5,6 +5,7 @@ import type { Betslip } from '@/types/betslip'
 import { getRiskLabel } from '@/types/betslip'
 import { usePayment } from '@/hooks/usePayment'
 import { SlipReveal } from '@/components/ui/SlipReveal'
+import { buyerHeader } from '@/lib/guestId'
 
 function Chip({ children }: { children: React.ReactNode }) {
   return <span style={{ background: 'var(--bg3)', color: 'var(--offwhite)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, border: '1px solid var(--line)' }}>{children}</span>
@@ -82,7 +83,7 @@ export function BetslipFeed({ slips, tipsterName, onPurchased }: { slips: Betsli
   // Pre-load the buyer's purchases so already-owned slips show unlocked on ANY device.
   const [owned, setOwned] = useState<Set<string>>(new Set())
   useEffect(() => {
-    fetch('/api/subscribe').then(r => r.json()).then(d => {
+    fetch('/api/subscribe', { headers: buyerHeader() }).then(r => r.json()).then(d => {
       const ids = (d.subscriptions ?? []).filter((p: any) => p.status === 'active').map((p: any) => p.betslip_id)
       if (ids.length) setOwned(new Set(ids))
     }).catch(() => {})

@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { resolveImageUrl } from '@/lib/imageUpload'
+import { buyerHeader } from '@/lib/guestId'
 
 export function SlipReveal({ betslipId }: { betslipId: string }) {
   const [data, setData]       = useState<any>(null)
@@ -12,7 +13,7 @@ export function SlipReveal({ betslipId }: { betslipId: string }) {
   const [copied, setCopied]   = useState(false)
 
   useEffect(() => {
-    fetch(`/api/slips/${betslipId}/reveal`)
+    fetch(`/api/slips/${betslipId}/reveal`, { headers: buyerHeader() })
       .then(r => r.ok ? r.json() : null)
       .then(d => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))

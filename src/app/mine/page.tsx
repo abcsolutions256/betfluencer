@@ -3,22 +3,17 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
 import { Loader2 } from 'lucide-react'
-import { supabaseBrowser } from '@/lib/supabase/client'
+import { buyerHeader } from '@/lib/guestId'
 
 export default function MinePage() {
   const [loading, setLoading] = useState(true)
-  const [authed, setAuthed]   = useState(false)
   const [subs, setSubs]       = useState<any[]>([])
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabaseBrowser().auth.getUser()
-      if (!data.user) { setAuthed(false); setLoading(false); return }
-      setAuthed(true)
-      const r = await fetch('/api/subscribe').then(x => x.json()).catch(() => ({ subscriptions: [] }))
-      setSubs(r.subscriptions ?? [])
-      setLoading(false)
-    })()
+    // Anonymous buyer — purchases are keyed on the localStorage guest id.
+    fetch('/api/subscribe', { headers: buyerHeader() })
+      .then(x => x.json()).catch(() => ({ subscriptions: [] }))
+      .then(r => { setSubs(r.subscriptions ?? []); setLoading(false) })
   }, [])
 
   return (
@@ -29,10 +24,6 @@ export default function MinePage() {
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: '44px 0' }}><Loader2 size={26} color="var(--gold)" className="spin" /></div>
-        ) : !authed ? (
-          <Empty icon="🔒" title="Log in to see your purchases">
-            <Link href="/login"><button className="btn-gold" style={{ maxWidth: 200 }}>Log in</button></Link>
-          </Empty>
         ) : subs.length === 0 ? (
           <Empty icon="🎫" title="No purchases yet">
             <Link href="/slips"><button className="btn-gold" style={{ maxWidth: 200 }}>Browse slips</button></Link>

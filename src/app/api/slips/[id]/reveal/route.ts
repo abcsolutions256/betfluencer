@@ -1,16 +1,16 @@
 // ── GET /api/slips/[id]/reveal ────────────────────────────────────
-// The bulletproof unlock. Finished slips (win/loss) are free → content
-// returned to anyone. Pending slips: content returned ONLY to a logged-in
-// user with an active purchase (or the owning tipster). The secret lives
-// in betslip_secrets (service-role only) + betslip_legs + slip_verifications
-// — never in a public list response.
+// The unlock. Finished slips (win/loss) are free → content returned to anyone.
+// Pending slips: content returned ONLY to a buyer with an active purchase for
+// this slip (identified by the `x-buyer-key` header / `?buyer=` — no login) OR
+// the owning tipster (session). The secret lives in betslip_secrets
+// (service-role only) + betslip_legs + slip_verifications — never in a list.
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { supabaseServer } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const db = supabaseServer()
   const slipId = params.id
 
@@ -19,19 +19,26 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const finished = slip.result === 'win' || slip.result === 'loss'
 
   if (!finished) {
-    const user = await getSessionUser()
-    if (!user) return NextResponse.json({ error: 'Login required' }, { status: 401 })
+    const buyerKey = (req.headers.get('x-buyer-key') ?? new URL(req.url).searchParams.get('buyer') ?? '').trim()
 
-    const { data: purchase } = await db
-      .from('slip_purchases').select('id')
-      .eq('betslip_id', slipId).eq('buyer_id', user.id).eq('status', 'active').maybeSingle()
-
-    let owner = false
-    if (!purchase) {
-      const { data: t } = await db.from('tipsters').select('id').eq('id', slip.tipster_id).eq('profile_id', user.id).maybeSingle()
-      owner = !!t
+    let purchased = false
+    if (buyerKey) {
+      const { data: purchase } = await db
+        .from('slip_purchases').select('id')
+        .eq('betslip_id', slipId).eq('buyer_key', buyerKey).eq('status', 'active').maybeSingle()
+      purchased = !!purchase
     }
-    if (!purchase && !owner) return NextResponse.json({ error: 'Not purchased' }, { status: 403 })
+
+    // Owning tipster (logged in) can always view their own slip.
+    let owner = false
+    if (!purchased) {
+      const user = await getSessionUser()
+      if (user) {
+        const { data: t } = await db.from('tipsters').select('id').eq('id', slip.tipster_id).eq('profile_id', user.id).maybeSingle()
+        owner = !!t
+      }
+    }
+    if (!purchased && !owner) return NextResponse.json({ error: 'Not purchased' }, { status: 403 })
   }
 
   const [{ data: secret }, { data: legs }, { data: verif }] = await Promise.all([

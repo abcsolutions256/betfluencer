@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import type { PaymentMethod, PaymentResult, TxnStatus } from '@/types/payments'
 import { isTerminal } from '@/types/payments'
+import { buyerHeader } from '@/lib/guestId'
 
 interface Props {
   open:         boolean
@@ -115,7 +116,7 @@ export function PaymentSheet({
     try {
       const res = await fetch('/api/payments/initiate', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buyerHeader() },
         body: JSON.stringify({ betslip_id: betslipId, method, payer }),
       })
       const data: PaymentResult = await res.json()
