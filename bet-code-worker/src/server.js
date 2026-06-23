@@ -61,10 +61,13 @@ app.post('/verify', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'betting_site and booking_code are required' })
   }
   if (!getAdapter(betting_site)) {
+    console.warn(`[verify] rejected — unsupported site "${betting_site}"`)
     return res.status(400).json({ ok: false, error: `Unsupported site "${betting_site}". Supported: ${supportedSites().join(', ')}` })
   }
 
   await acquire()
+  const startedAt = Date.now()
+  console.log(`[verify] → site=${betting_site} code=${booking_code}`)
   try {
     // Preserve the code's case — some bookies (e.g. Betika "KkxPBu") use
     // case-sensitive codes; lowercasing them would 404 the share URL. Only
@@ -84,10 +87,13 @@ app.post('/verify', async (req, res) => {
       }
     }
 
+    console.log(`[verify] ✓ site=${betting_site} code=${booking_code} found=${result.found} count=${result.count} (${Date.now() - startedAt}ms)`)
     res.json({ ok: true, ...result, ...enrich, screenshot_url: shotUrl(req, result.screenshot) })
   } catch (e) {
-    // Return 200 with ok:false so the caller can persist a 'failed' record.
-    res.json({ ok: false, betting_site, booking_code, error: e?.message || 'scrape failed', matches: [], raw_text: '', count: 0, screenshot_url: shotUrl(req, e?.screenshot) })
+    // Log the failure (the scraper already logged the exact step) + return 200
+    // with ok:false (incl. the failing `step`) so the caller can persist it.
+    console.error(`[verify] ✗ site=${betting_site} code=${booking_code} FAILED at step "${e?.step ?? '?'}" (${Date.now() - startedAt}ms): ${e?.message}`)
+    res.json({ ok: false, betting_site, booking_code, error: e?.message || 'scrape failed', step: e?.step ?? null, matches: [], raw_text: '', count: 0, screenshot_url: shotUrl(req, e?.screenshot) })
   } finally {
     release()
   }

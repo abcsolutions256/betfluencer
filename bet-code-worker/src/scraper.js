@@ -43,10 +43,18 @@ async function getBrowser() {
 
 // Public: scrape one code. Throws on unsupported site / missing code;
 // otherwise resolves to { site, code, matches, raw_text, count }.
+// Logs every step (and warns on each silent fallback) so a failure prints
+// exactly WHERE it broke + a debug screenshot.
 export async function scrapeCode({ site, code }) {
   const adapter = getAdapter(site)
   if (!adapter) throw new Error(`Unsupported betting site: ${site}`)
   if (!code) throw new Error('Missing booking code')
+
+  const tag  = `[scrape ${adapter.name}/${code}]`
+  const t0   = Date.now()
+  const log  = (m) => console.log(`${tag} ${m} (+${Date.now() - t0}ms)`)
+  const warn = (m) => console.warn(`${tag} ⚠ ${m}`)
+  let step = 'launch-browser'
 
   const browser = await getBrowser()
   // Fresh, isolated context per scrape. Bookies persist the betslip in
@@ -57,56 +65,78 @@ export async function scrapeCode({ site, code }) {
   // code starts from a clean slate.
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
+  // Surface JS errors / failed requests from the bookie page — these often
+  // explain why a selector never appears.
+  page.on('pageerror', (e) => warn(`page JS error: ${e?.message}`))
+  page.on('requestfailed', (r) => { const u = r.url(); if (/coupon|booking|share|bet|api/i.test(u)) warn(`request failed: ${r.failure()?.errorText} ${u.slice(0, 120)}`) })
+  log('start')
   try {
     await page.setUserAgent(UA)
     await page.setViewport({ width: 1280, height: 900 })
 
-    // Block heavy resources — we only need the DOM text, not pixels.
-    // await page.setRequestInterception(true)
-    // page.on('request', (r) => {
-    //   const t = r.resourceType()
-    //   if (t === 'image' || t === 'media' || t === 'font') r.abort()
-    //   else r.continue()
-    // })
-
     // Load the code: direct URL when the bookie supports it, else
     // type-and-submit into the booking-code field.
     if (adapter.codeUrl) {
-      await page.goto(adapter.codeUrl(code), { waitUntil: 'networkidle2', timeout: NAV_TIMEOUT })
+      step = 'goto-codeUrl'
+      const url = adapter.codeUrl(code)
+      log(`GET ${url}`)
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: NAV_TIMEOUT })
     } else {
+      step = 'goto-url'
+      log(`GET ${adapter.url}`)
       await page.goto(adapter.url, { waitUntil: 'networkidle2', timeout: NAV_TIMEOUT })
+
       // Some bookies hide the booking-code field behind a toggle that must be
       // clicked first (e.g. 1xBet/22Bet "Save/load events" reveals the
       // coupon-code input). Click it before waiting for the input.
       if (adapter.expandSelector) {
-        await page.waitForSelector(adapter.expandSelector, { timeout: NAV_TIMEOUT }).catch(() => {})
+        step = 'expand-toggle'
+        const opened = await page.waitForSelector(adapter.expandSelector, { timeout: NAV_TIMEOUT }).then(() => true).catch(() => false)
+        if (!opened) warn(`expandSelector never appeared: ${adapter.expandSelector}`)
         const toggle = await page.$(adapter.expandSelector)
-        if (toggle) { await toggle.click().catch(() => {}); await new Promise(r => setTimeout(r, 700)) }
+        if (toggle) { await toggle.click().catch((e) => warn(`expand click failed: ${e?.message}`)); await new Promise(r => setTimeout(r, 700)); log('expanded code panel') }
       }
+
       // Selector strings may be comma-separated lists — valid CSS that
       // querySelector / waitForSelector accept (first match wins).
+      step = 'wait-input'
+      log(`waiting for input: ${adapter.inputSelector}`)
       await page.waitForSelector(adapter.inputSelector, { timeout: NAV_TIMEOUT })
+
+      step = 'type-code'
       const input = await page.$(adapter.inputSelector)
       await input.type(code, { delay: 40 })
+      log('typed code')
+
+      step = 'submit'
       if (adapter.submitSelector) {
         const btn = await page.$(adapter.submitSelector)
-        if (btn) await btn.click()
-        else await page.keyboard.press('Enter')
+        if (btn) { await btn.click(); log(`clicked submit: ${adapter.submitSelector}`) }
+        else { warn(`submitSelector not found, pressing Enter instead: ${adapter.submitSelector}`); await page.keyboard.press('Enter') }
       } else {
         await page.keyboard.press('Enter')
       }
+
       // Some bookies navigate/reload when applying the code (1xBet/22Bet Load
       // reloads to render the coupon). Absorb that navigation so the later
       // page.evaluate doesn't throw "Execution context was destroyed".
       if (adapter.navigatesOnSubmit) {
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: NAV_TIMEOUT }).catch(() => {})
+        step = 'wait-navigation'
+        const navd = await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: NAV_TIMEOUT }).then(() => true).catch(() => false)
+        log(navd ? 'page reloaded after submit' : 'no reload after submit (continuing)')
       }
     }
 
     // Wait for the results section to render (don't hard-fail if missing —
     // we still return whatever text is on the page for manual review).
-    if (adapter.waitFor) await page.waitForSelector(adapter.waitFor, { timeout: NAV_TIMEOUT }).catch(() => {})
+    if (adapter.waitFor) {
+      step = 'wait-result'
+      const got = await page.waitForSelector(adapter.waitFor, { timeout: NAV_TIMEOUT }).then(() => true).catch(() => false)
+      if (got) log('result section rendered')
+      else warn(`result selector never appeared (expect 0 matches): ${adapter.waitFor}`)
+    }
 
+    step = 'extract'
     const data = await page.evaluate((a) => {
       // Skip empty selector parts — querySelector('') throws a SyntaxError
       // and would drop the whole row mapping (e.g. empty league/kickoff).
@@ -135,8 +165,16 @@ export async function scrapeCode({ site, code }) {
       return { rawText, matches }
     }, adapter)
 
+    let pageUrl = '?'; try { pageUrl = page.url() } catch { /* ignore */ }
+    log(`extracted ${data.matches.length} match(es) from ${pageUrl}`)
+
     // Screenshot what the scraper sees just before the page closes.
+    step = 'screenshot'
     const shot = await capture(page, site, code)
+    if (data.matches.length === 0) {
+      warn(`NO matches parsed — code may be invalid/expired, an anti-bot wall, or stale selectors (rowSelector="${adapter.rowSelector}"). Debug screenshot: ${shot ?? 'none'}`)
+    }
+    log(`done — found=${data.matches.length > 0} count=${data.matches.length}`)
     return {
       site:     adapter.name,
       code,
@@ -147,9 +185,15 @@ export async function scrapeCode({ site, code }) {
       screenshot: shot,
     }
   } catch (err) {
-    // On failure, still capture the page — this is the most useful shot
-    // for debugging (shows the anti-bot wall, wrong selector, empty slip…).
-    err.screenshot = await capture(page, site, code)
+    // On failure, still capture the page — the most useful shot for debugging
+    // (anti-bot wall, wrong selector, empty slip…) — and log exactly where.
+    const shot = await capture(page, site, code).catch(() => null)
+    err.screenshot = shot
+    err.step = step
+    let url = '?'; try { url = page.url() } catch { /* page may be gone */ }
+    console.error(`${tag} ✗ FAILED at step "${step}": ${err.message}`)
+    console.error(`${tag}   url=${url}  screenshot=${shot ?? 'none'}`)
+    if (err.stack) console.error(err.stack)
     throw err
   } finally {
     await page.close().catch(() => {})
