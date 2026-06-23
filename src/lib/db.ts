@@ -26,12 +26,12 @@ export async function getTipsterByIdentifier(slug: string): Promise<TipsterPubli
   const db = supabaseServer()
   if (!db) return null
 
-  // Try username first
+  // Try username first (maybeSingle returns null instead of throwing on no match)
   const { data: byUsername } = await db
     .from('tipster_stats')
     .select('*')
     .ilike('username', slug)
-    .single()
+    .maybeSingle()
 
   if (byUsername) return byUsername
 
@@ -40,11 +40,10 @@ export async function getTipsterByIdentifier(slug: string): Promise<TipsterPubli
     .from('tipster_stats')
     .select('*')
     .eq('id', slug)
-    .single()
+    .maybeSingle()
 
   return byId ?? null
 }
-
 // ── TIPS ─────────────────────────────────────────────────────────
 export async function getTipsByTipster(tipsterId: string): Promise<Tip[]> {
   const db = supabaseServer()
