@@ -1,29 +1,20 @@
-import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server'
+import { getTipsterByIdentifier, getTipsByTipster } from '@/lib/db'
 
-export async function GET(_: Request, { params }: { params: { slug: string } }) {
-  const db = supabaseServer()
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
 
-  // Try username first
-  const { data: byUsername } = await db
-    .from('tipster_stats')
-    .select('id')
-    .ilike('username', params.slug)
-    .single()
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { slug: string } }
+) {
+  const tipster = await getTipsterByIdentifier(params.slug)
+  if (!tipster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const tipsterId = byUsername?.id ?? params.slug
-
-  const { data } = await db
-    .from('betslips')
-    .select('*, betslip_legs(*)')
-    .eq('tipster_id', tipsterId)
-    .order('posted_at', { ascending: false })
-    .limit(50)
-
-  const slips = (data ?? []).map((s: any) => ({
-    ...s,
-    legs: s.betslip_legs ?? [],
-  }))
-
-  return NextResponse.json({ slips })
+  const tips = await getTipsByTipster(tipster.id)
+  return NextResponse.json(
+    { tipster, tips },
+    { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+  )
 }
