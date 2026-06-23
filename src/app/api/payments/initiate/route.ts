@@ -1,14 +1,15 @@
 // ── POST /api/payments/initiate ───────────────────────────────────
-// Start a per-slip purchase for the LOGGED-IN buyer. Requires a session,
-// a verified+live slip, and ties the purchase to buyer_id (so it follows
-// the user across devices and gates the reveal). Creates pending
-// transaction + slip_purchase, then asks ioTec to collect.
+// Start a per-slip purchase for an ANONYMOUS buyer (no login). The buyer is
+// identified by a localStorage key sent in the `x-buyer-key` header; the
+// purchase is keyed on it (one row per slip + buyer key). Verified+live slip
+// required. Creates pending transaction + slip_purchase, then asks ioTec to
+// collect. NOTE: localStorage is per-browser — purchases don't follow a buyer
+// across devices.
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { rateLimit, getClientIP, rateLimitResponse } from '@/lib/rateLimit'
 import { supabaseServer } from '@/lib/supabase'
 import { normalisePhone } from '@/lib/auth'
-import { getSessionUser } from '@/lib/auth/session'
 import { collect } from '@/lib/iotec'
 import { createTransaction, updateTransaction } from '@/lib/transactions'
 import { normalizeIotecStatus, MIN_AMOUNT_UGX } from '@/types/payments'
@@ -27,8 +28,8 @@ export async function POST(req: NextRequest) {
   const rl = rateLimit('payments', getClientIP(req))
   if (!rl.allowed) return rateLimitResponse(rl.resetIn)
 
-  const user = await getSessionUser()
-  if (!user) return NextResponse.json({ error: 'Please log in to buy a slip.' }, { status: 401 })
+  const buyerKey = (req.headers.get('x-buyer-key') ?? '').trim()
+  if (!buyerKey) return NextResponse.json({ error: 'Missing buyer key' }, { status: 400 })
 
   const parsed = schema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
   // Already own it?
   const { data: owned } = await db
     .from('slip_purchases').select('id, status')
-    .eq('betslip_id', betslip_id).eq('buyer_id', user.id).maybeSingle()
+    .eq('betslip_id', betslip_id).eq('buyer_key', buyerKey).maybeSingle()
   if (owned?.status === 'active') return NextResponse.json({ error: 'You already own this slip.', already: true }, { status: 409 })
 
   // Resolve the payer for ioTec (phone for momo, email for card).
@@ -95,10 +96,10 @@ export async function POST(req: NextRequest) {
   }
 
   let purchaseId: string
-  // 1) Existing purchase for this slip + buyer?
+  // 1) Existing purchase for this slip + buyer key?
   const { data: existing, error: selErr } = await db
     .from('slip_purchases').select('id')
-    .eq('betslip_id', betslip_id).eq('buyer_id', user.id).maybeSingle()
+    .eq('betslip_id', betslip_id).eq('buyer_key', buyerKey).maybeSingle()
   if (selErr) return abort('lookup', selErr)
 
   if (existing) {
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
     // 2b) Insert a new pending purchase.
     const { data: inserted, error: insErr } = await db
       .from('slip_purchases')
-      .insert({ betslip_id, buyer_id: user.id, ...fields })
+      .insert({ betslip_id, buyer_key: buyerKey, ...fields })
       .select('id').single()
     if (insErr || !inserted) return abort('insert', insErr)
     purchaseId = inserted.id

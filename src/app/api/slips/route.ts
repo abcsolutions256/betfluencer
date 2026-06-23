@@ -13,7 +13,7 @@ export async function GET() {
   const { data: slips, error } = await db
     .from('betslips')
     .select('id, tipster_id, posting_mode, total_odds, leg_count, game_count, leagues, markets, earliest_kickoff, result, slip_price, verification_status, posted_at, tipsters ( id, name, username )')
-    .or('verification_status.eq.verified,result.eq.win,result.eq.loss')
+    // .or('verification_status.eq.verified,result.eq.win,result.eq.loss')
     .order('posted_at', { ascending: false })
 
   if (error) return NextResponse.json({ slips: [] })
