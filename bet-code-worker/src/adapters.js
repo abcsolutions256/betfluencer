@@ -24,7 +24,7 @@ export const adapters = {
     url: 'https://1xbet.ug/en/line/football',
     expandSelector: '.coupon-loader-toggle',
     navigatesOnSubmit: true,                  // Load reloads the page to apply the coupon
-    inputSelector:  'input.coupon-loader__input, input[placeholder="Event code" i]',
+    inputSelector:  'input[placeholder="Event code" i]',
     // Save + Load share .coupon-loader__button; Save is theme-accent (green),
     // Load is theme-gray. Target Load by theme so we don't re-Save. (They are
     // NOT inside .coupon-loader__box; Load is disabled until a code is typed,
