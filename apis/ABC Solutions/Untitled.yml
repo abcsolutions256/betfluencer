@@ -4,8 +4,18 @@ info:
   seq: 1
 
 http:
-  method: GET
-  url: ""
+  method: POST
+  url: http://localhost:8080/verify
+  headers:
+    - name: x-worker-key
+      value: RDSjXtgLv2Q0QWCb5FIaBYRyrb9TR2i9LF2ouKFb4yE=
+  body:
+    type: json
+    data: |-
+      {
+        "betting_site":"betika",
+        "booking_code":"z9nvng"
+      }
   auth: inherit
 
 settings:
