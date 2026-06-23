@@ -91,7 +91,7 @@ function ReviewTab({ token }: { token: string }) {
 
   function load() {
     setLoading(true)
-    fetch(`/api/admin/pending-slips?t=${Date.now()}`, { headers: { 'x-admin-token': token } })
+    fetch(`/api/admin/pending-slips?t=${Date.now()}`, { headers: { 'x-admin-token': token }, cache: 'no-store' })
       .then(r => r.json())
       .then(d => { setSlips(d.slips ?? []); setLoading(false) })
       .catch(() => setLoading(false))
