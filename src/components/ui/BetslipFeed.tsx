@@ -222,7 +222,7 @@ function BetslipCard({ slip, defaultOpen = false }: { slip: Betslip; defaultOpen
     return !!localStorage.getItem(`bf_slip_${slip.id}`)
   })
 
-  const finished = slip.result === 'win' || slip.result === 'loss'
+  const finished = slip.result === 'win' || slip.result === 'loss' || slip.result === 'void'
   const canView  = finished || unlocked
   const legs     = slip.legs ?? []
   const wonLegs  = legs.filter(l => l.result === 'win').length
