@@ -5,6 +5,12 @@
 // slip_verifications — so the app stays in sync with the betting sites.
 //
 // Auth: header `x-sync-token: <SYNC_TOKEN>`.
+//
+// Set SYNC_CODES_ENABLED=false to turn this OFF — the bookie scraper gets
+// blocked from datacenter IPs, so in production we disable it here and run the
+// code-sync from a LOCAL stack (residential IP) against the same database.
+// Default (unset) = enabled. (Payment reconciliation is unaffected — it talks
+// to ioTec, not the bookie, so it keeps running in production.)
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
@@ -14,6 +20,10 @@ async function handler(req: NextRequest) {
   const token = req.headers.get('x-sync-token') ?? ''
   if (!process.env.SYNC_TOKEN || token !== process.env.SYNC_TOKEN) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
+  if (process.env.SYNC_CODES_ENABLED === 'false') {
+    return NextResponse.json({ ok: true, disabled: true, processed: 0, found: 0 })
   }
 
   const db    = supabaseServer()

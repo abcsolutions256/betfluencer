@@ -34,6 +34,9 @@ services:
       BET_CODE_WORKER_KEY: ${BET_CODE_WORKER_KEY}
       SYNC_TOKEN: ${SYNC_TOKEN}
       SYNC_BATCH: ${SYNC_BATCH:-20}
+      # Bookie scraper gets blocked from datacenter IPs — disable the code-sync
+      # here and run it from a local stack. Payment reconcile is unaffected.
+      SYNC_CODES_ENABLED: ${SYNC_CODES_ENABLED:-false}
     depends_on:
       - bet-code-worker
     # Liveness probe so `sync` waits for a real "Ready" before polling.

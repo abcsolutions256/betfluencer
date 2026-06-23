@@ -43,6 +43,8 @@ services:
       BET_CODE_WORKER_KEY: ${BET_CODE_WORKER_KEY}
       SYNC_TOKEN: ${SYNC_TOKEN}
       SYNC_BATCH: ${SYNC_BATCH:-20}
+      # Local stack runs the bookie code-sync (residential IP isn't blocked).
+      SYNC_CODES_ENABLED: ${SYNC_CODES_ENABLED:-true}
     ports:
       - "3000:3000"
     volumes:
