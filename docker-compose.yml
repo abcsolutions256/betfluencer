@@ -101,10 +101,12 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        echo "sync: web healthy — polling /api/slips/sync-codes every $${SYNC_INTERVAL:-300}s";
+        echo "sync: web healthy — polling sync-codes + payments/reconcile every $${SYNC_INTERVAL:-300}s";
         while true; do
           curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/slips/sync-codes \
-            && echo "" || echo "sync: web unreachable, will retry";
+            && echo "" || echo "sync: codes unreachable, will retry";
+          curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/payments/reconcile \
+            && echo "" || echo "sync: reconcile unreachable, will retry";
           sleep "$${SYNC_INTERVAL:-300}";
         done
     restart: unless-stopped

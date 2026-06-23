@@ -73,16 +73,51 @@ export async function POST(req: NextRequest) {
   })
   if (!txn) return NextResponse.json({ error: 'Could not create transaction' }, { status: 500 })
 
-  // Upsert the pending purchase tied to the buyer (one per slip+buyer).
-  const { data: purchase } = await db
-    .from('slip_purchases')
-    .upsert({
-      betslip_id, tipster_id: tipster.id, buyer_id: user.id,
-      user_phone: user_phone ?? user_email ?? payerForIotec,
-      user_name:  payer_name ?? '', amount_paid: amount, status: 'pending',
-    }, { onConflict: 'betslip_id,buyer_id' })
-    .select().single()
-  if (purchase) await updateTransaction(txn.id, { slip_purchase_id: purchase.id })
+  // ── Record the pending purchase (one row per slip+buyer) BEFORE charging ──
+  // Explicit lookup → insert/update (no ON CONFLICT / unique-index dependency)
+  // with per-step error reporting, so we never charge without a row AND we
+  // surface the exact DB error. `detail`/`step` are dev-only.
+  const fields = {
+    tipster_id: tipster.id,
+    user_phone: user_phone ?? user_email ?? payerForIotec,
+    user_name:  payer_name ?? '',
+    amount_paid: amount,
+    status:     'pending' as const,
+  }
+  const abort = async (step: string, e: any) => {
+    console.error(`initiate: slip_purchase ${step} failed —`, e?.message)
+    await updateTransaction(txn.id, { status: 'failed', status_message: `purchase ${step} failed` })
+    return NextResponse.json({
+      error:  'Could not start the purchase. Please try again.',
+      step,
+      detail: process.env.NODE_ENV !== 'production' ? (e?.message ?? 'unknown error') : undefined,
+    }, { status: 500 })
+  }
+
+  let purchaseId: string
+  // 1) Existing purchase for this slip + buyer?
+  const { data: existing, error: selErr } = await db
+    .from('slip_purchases').select('id')
+    .eq('betslip_id', betslip_id).eq('buyer_id', user.id).maybeSingle()
+  if (selErr) return abort('lookup', selErr)
+
+  if (existing) {
+    // 2a) Reuse it — reset to pending for this fresh attempt.
+    purchaseId = existing.id
+    const { error: updErr } = await db.from('slip_purchases').update(fields).eq('id', purchaseId)
+    if (updErr) return abort('update', updErr)
+  } else {
+    // 2b) Insert a new pending purchase.
+    const { data: inserted, error: insErr } = await db
+      .from('slip_purchases')
+      .insert({ betslip_id, buyer_id: user.id, ...fields })
+      .select('id').single()
+    if (insErr || !inserted) return abort('insert', insErr)
+    purchaseId = inserted.id
+  }
+
+  // 3) Link the transaction to the purchase so fulfillment can unlock it.
+  await updateTransaction(txn.id, { slip_purchase_id: purchaseId })
 
   const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/pay/return?ext=${external_id}`
   const res = await collect({ amount, payer: payerForIotec, externalId: external_id, payerName: payer_name, payerNote: 'Betfluencer slip purchase', redirectUrl })

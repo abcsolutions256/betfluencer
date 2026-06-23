@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Lock, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Betslip } from '@/types/betslip'
 import { getRiskLabel } from '@/types/betslip'
@@ -31,11 +31,11 @@ function InlineBuyGate({ slip, tipsterName, onUnlock }: { slip: Betslip; tipster
   )
 }
 
-function BetslipCard({ slip, tipsterName, defaultOpen = false, onPurchased }: { slip: Betslip; tipsterName?: string; defaultOpen?: boolean; onPurchased?: () => void }) {
+function BetslipCard({ slip, tipsterName, defaultOpen = false, owned = false, onPurchased }: { slip: Betslip; tipsterName?: string; defaultOpen?: boolean; owned?: boolean; onPurchased?: () => void }) {
   const [open, setOpen]         = useState(defaultOpen)
   const [unlocked, setUnlocked] = useState(false)
   const finished = slip.result === 'win' || slip.result === 'loss'
-  const canView  = finished || unlocked
+  const canView  = finished || unlocked || owned   // `owned` = already purchased (pre-loaded) → works cross-device
   const risk     = getRiskLabel(slip.total_odds ?? 1)
   const games    = slip.game_count ?? slip.leg_count ?? 0
   const leagues  = slip.leagues ?? []
@@ -79,6 +79,14 @@ function BetslipCard({ slip, tipsterName, defaultOpen = false, onPurchased }: { 
 }
 
 export function BetslipFeed({ slips, tipsterName, onPurchased }: { slips: Betslip[]; tipsterName?: string; onPurchased?: () => void }) {
+  // Pre-load the buyer's purchases so already-owned slips show unlocked on ANY device.
+  const [owned, setOwned] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    fetch('/api/subscribe').then(r => r.json()).then(d => {
+      const ids = (d.subscriptions ?? []).filter((p: any) => p.status === 'active').map((p: any) => p.betslip_id)
+      if (ids.length) setOwned(new Set(ids))
+    }).catch(() => {})
+  }, [])
   const sorted = [...slips].sort((a, b) => new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime())
   return (
     <>
@@ -88,7 +96,7 @@ export function BetslipFeed({ slips, tipsterName, onPurchased }: { slips: Betsli
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--offwhite)' }}>No verified slips yet</div>
         </div>
       ) : sorted.map((slip, i) => (
-        <BetslipCard key={slip.id} slip={slip} tipsterName={tipsterName} defaultOpen={i === 0 && slip.result !== 'pending'} onPurchased={onPurchased} />
+        <BetslipCard key={slip.id} slip={slip} tipsterName={tipsterName} owned={owned.has(slip.id)} defaultOpen={i === 0 && slip.result !== 'pending'} onPurchased={onPurchased} />
       ))}
     </>
   )

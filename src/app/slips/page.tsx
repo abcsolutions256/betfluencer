@@ -89,6 +89,12 @@ export default function SlipsPage() {
 
   useEffect(() => {
     fetch('/api/slips').then(r => r.json()).then(d => { setAllSlips(d.slips ?? []); setLoading(false) }).catch(() => setLoading(false))
+    // Pre-load the logged-in buyer's purchases so an already-owned slip shows
+    // as Unlocked on ANY device — not just the browser where it was bought.
+    fetch('/api/subscribe').then(r => r.json()).then(d => {
+      const owned: string[] = (d.subscriptions ?? []).filter((p: any) => p.status === 'active').map((p: any) => p.betslip_id)
+      if (owned.length) setUnlocked(prev => { const next = new Set(prev); owned.forEach(id => next.add(id)); return next })
+    }).catch(() => {})
   }, [])
 
   const oddsFilter = getOddsFilter(filter)
