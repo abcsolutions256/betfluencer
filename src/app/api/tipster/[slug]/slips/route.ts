@@ -8,6 +8,7 @@ export const fetchCache = 'force-no-store'
 export async function GET(_: Request, { params }: { params: { slug: string } }) {
   const db = supabaseServer()
 
+  // Resolve username -> id (falls back to treating slug as id)
   const { data: byUsername } = await db
     .from('tipster_stats')
     .select('id')
@@ -21,9 +22,13 @@ export async function GET(_: Request, { params }: { params: { slug: string } }) 
     .select('*, betslip_legs(*)')
     .eq('tipster_id', tipsterId)
     .order('posted_at', { ascending: false })
-    .limit(50)
+    .limit(200)
 
-  const slips = (data ?? []).map((s: any) => ({ ...s, legs: s.betslip_legs ?? [] }))
+  // Hide seeded historical slips from public view (NULL-safe filter in JS)
+  const slips = (data ?? [])
+    .filter((s: any) => s.note !== '__seed__')
+    .slice(0, 50)
+    .map((s: any) => ({ ...s, legs: s.betslip_legs ?? [] }))
 
   return NextResponse.json(
     { slips },
