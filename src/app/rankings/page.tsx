@@ -38,7 +38,7 @@ function ResultDots({ last5 }: { last5: string }) {
     return <span style={{ fontSize: 11, color: '#9ca3af' }}>—</span>
   }
   return (
-    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+    <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
       {results.map((r, i) => {
         const bg = r === 'W' ? '#16c60c' : r === 'L' ? '#ff2d2d' : '#f5a623'
         return (
@@ -46,9 +46,9 @@ function ResultDots({ last5 }: { last5: string }) {
             key={i}
             title={r === 'W' ? 'Won' : r === 'L' ? 'Lost' : 'Pending'}
             style={{
-              width: 16, height: 16, borderRadius: '50%',
+              width: 14, height: 14, borderRadius: '50%',
               background: bg,
-              boxShadow: `0 0 6px ${bg}`,
+              boxShadow: `0 0 4px ${bg}`,
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 8, fontWeight: 800, color: '#fff', flexShrink: 0,
             }}
@@ -87,11 +87,12 @@ export default function RankingsPage() {
     fetch('/api/tipster', { cache: 'no-store' })
       .then(r => r.json())
       .then(d => {
-        const sorted = (d.tipsters ?? []).sort((a: TipsterRow, b: TipsterRow) => {
-          const scoreA = (a.wins_last_10 / 10) * (a.avg_odds || 1)
-          const scoreB = (b.wins_last_10 / 10) * (b.avg_odds || 1)
-          return scoreB - scoreA
-        })
+        const scoreOf = (t: TipsterRow) => {
+          const settled = (t.wins_last_10 ?? 0) + (t.losses ?? 0)
+          const winRate = settled > 0 ? t.wins_last_10 / settled : 0
+          return winRate * (t.avg_odds || 1)
+        }
+        const sorted = (d.tipsters ?? []).sort((a: TipsterRow, b: TipsterRow) => scoreOf(b) - scoreOf(a))
         setTipsters(sorted)
         setLoading(false)
       })
@@ -158,7 +159,7 @@ export default function RankingsPage() {
                   <th style={{ ...cell, ...th, width: 46 }}>Odds</th>
                   <th style={{ ...cell, ...th, width: 56 }}>ROI</th>
                   <th className="rk-optional" style={{ ...cell, ...th, width: 56 }}>Streak</th>
-                  <th className="rk-optional" style={{ ...cell, ...th, width: 110 }}>Last 5</th>
+                  <th style={{ ...cell, ...th, width: 88 }}>Last 5</th>
                   {showExtra && <th style={{ ...cell, ...th, width: 50 }}>Score</th>}
                 </tr>
               </thead>
@@ -168,7 +169,7 @@ export default function RankingsPage() {
                   const barColor = zoneColor(rank, tipsters.length)
                   const settled = (t.wins_last_10 ?? 0) + (t.losses ?? 0)
                   const winPct = settled > 0 ? t.wins_last_10 / settled : 0
-                  const score = (t.wins_last_10 / 10) * (t.avg_odds || 1)
+                  const score = winPct * (t.avg_odds || 1)
                   const avatar = t.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
                   const color = COLORS[i % COLORS.length]
                   const rowBg = i % 2 === 0 ? '#ffffff' : '#f9fafb'
@@ -207,7 +208,7 @@ export default function RankingsPage() {
                       <td className="rk-optional" style={{ ...cell }}>
                         <span style={{ fontWeight: 800, color: streak.color }}>{streak.text}</span>
                       </td>
-                      <td className="rk-optional" style={{ ...cell }}><ResultDots last5={t.last5 ?? ''} /></td>
+                      <td style={{ ...cell }}><ResultDots last5={t.last5 ?? ''} /></td>
                       {showExtra && <td style={{ ...cell }}><span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{score.toFixed(2)}</span></td>}
                     </tr>
                   )
