@@ -1,39 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, X, Clock, Ticket, Loader2, Smartphone, CheckCircle } from 'lucide-react'
+import { Search, X, Ticket, Loader2, Smartphone, CheckCircle } from 'lucide-react'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
 import { ODDS_FILTERS, getOddsFilter, parseOddsQuery, getRiskLabel } from '@/types/betslip'
 import type { Betslip, SlipLeg } from '@/types/betslip'
 import { resolveImageUrl } from '@/lib/imageUpload'
 
-// ── COUNTDOWN ────────────────────────────────────────────────────
-function Countdown({ targetTime }: { targetTime: string }) {
-  const [secs, setSecs] = useState(0)
-  useEffect(() => {
-    const target = new Date(targetTime).getTime()
-    const tick = () => setSecs(Math.max(0, Math.floor((target - Date.now()) / 1000)))
-    tick(); const id = setInterval(tick, 1000); return () => clearInterval(id)
-  }, [targetTime])
-  if (secs <= 0) return <span style={{ fontSize: 11, color: 'var(--muted)' }}>Started</span>
-  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-      {[{ val: h, lbl: 'hrs' }, { val: m, lbl: 'min' }, { val: s, lbl: 'sec' }].map((b, i) => (
-        <div key={b.lbl} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {i > 0 && <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--offwhite)' }}>:</span>}
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gold)', lineHeight: 1 }}>{pad(b.val)}</div>
-            <div style={{ fontSize: 8, color: 'var(--muted)', fontWeight: 600, marginTop: 1 }}>{b.lbl}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── LEG ROW ──────────────────────────────────────────────────────
+// ── LEG ROW ───────────────────────────────────────────────────────
 function LegRow({ leg }: { leg: SlipLeg }) {
   const dotColor = leg.result === 'win' ? 'var(--green)' : leg.result === 'loss' ? 'var(--red)' : 'var(--gold)'
   return (
@@ -48,7 +22,7 @@ function LegRow({ leg }: { leg: SlipLeg }) {
   )
 }
 
-// ── SLIP CONTENT ─────────────────────────────────────────────────
+// ── SLIP CONTENT ──────────────────────────────────────────────────
 function SlipContent({ slip, tipsterUsername, router }: { slip: Betslip; tipsterUsername: string; router: any }) {
   return (
     <div>
@@ -98,7 +72,7 @@ function SlipContent({ slip, tipsterUsername, router }: { slip: Betslip; tipster
   )
 }
 
-// ── BUY MODAL ────────────────────────────────────────────────────
+// ── BUY MODAL ─────────────────────────────────────────────────────
 function BuyModal({ slip, tipsterName, onClose }: {
   slip: Betslip; tipsterName: string; onClose: (unlocked: boolean) => void
 }) {
@@ -180,7 +154,7 @@ function BuyModal({ slip, tipsterName, onClose }: {
   )
 }
 
-// ── SLIP CARD ────────────────────────────────────────────────────
+// ── SLIP CARD ─────────────────────────────────────────────────────
 function SlipCard({ slip, tipsterName, tipsterUsername, onBuy, showContent }: {
   slip: Betslip; tipsterName: string; tipsterUsername: string; onBuy: () => void; showContent: boolean
 }) {
@@ -189,7 +163,6 @@ function SlipCard({ slip, tipsterName, tipsterUsername, onBuy, showContent }: {
   const canView  = finished || showContent
   const risk     = getRiskLabel(slip.total_odds ?? 1)
   const legCount = slip.legs?.length ?? slip.leg_count ?? 0
-  const firstMatchTime = slip.legs?.[0]?.match_time ?? new Date(Date.now() + 2 * 3600000).toISOString()
   const initials = tipsterName.split(' ').map((w:string) => w[0]).join('').slice(0, 2).toUpperCase()
 
   return (
@@ -215,15 +188,7 @@ function SlipCard({ slip, tipsterName, tipsterUsername, onBuy, showContent }: {
             <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2, fontWeight: 600 }}>total odds</div>
           </div>
         </div>
-        {!finished ? (
-          <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <Clock size={13} color="var(--muted)" />
-              <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600 }}>First match in</span>
-            </div>
-            <Countdown targetTime={firstMatchTime} />
-          </div>
-        ) : (
+        {finished && (
           <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: '8px 12px', fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ color: slip.result === 'win' ? 'var(--green)' : 'var(--red)', fontSize: 14 }}>{slip.result === 'win' ? '✓' : '✗'}</span>
             Finished · Free to view
@@ -262,7 +227,7 @@ function SlipCard({ slip, tipsterName, tipsterUsername, onBuy, showContent }: {
   )
 }
 
-// ── MAIN PAGE ────────────────────────────────────────────────────
+// ── MAIN PAGE ─────────────────────────────────────────────────────
 export default function SlipsPage() {
   const [filter,      setFilter]      = useState('All')
   const [query,       setQuery]       = useState('')
