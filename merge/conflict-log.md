@@ -244,3 +244,32 @@ Computed with `git diff --quiet <base> <branch> -- <file>` on each side (exit 1 
 - **Resurrect from main (delete/modify):** `admin/pending-slips/route.ts`, `admin/settle/route.ts` → re-add + `requireRole('admin')`.
 - **Accept deletion (delete/modify), default:** `apitest`, `fixturetest`, `verify-debug` (or keep gated — decide).
 - **Hand-integrate (both sides):** `schema.sql`(→regen), `db.ts`, `betslip.ts`, `admin/page.tsx`, `channel/[slug]/page.tsx`, `mine/page.tsx`, `slips/page.tsx`, `BetslipFeed.tsx`, `api/slips/route.ts`, `api/tips/route.ts`, all four `api/tipster/*` routes.
+
+---
+
+## AS EXECUTED (step e — actual merge outcome)
+
+> The merge ran (`git merge main` into `stag`; commit `1b5f531`). Actuals vs the
+> forecast above:
+
+**15 real content conflicts (`UU`)** — matched the forecast's "integrate"/"dev-wins"
+set: `db.ts`, `payments.ts`, `supabase.ts`, `subscribe`, `slips/route`, `tips/route`,
+all four `tipster/*` routes, `channel/[slug]/page`, `mine/page`, `slips/page`,
+`BetslipFeed`, `tipster/dashboard`. Resolved per the cheat-sheet. See `merge/changes.md` §A.
+
+**Forecast corrections:**
+- `settle` / `pending-slips` / `apitest` / `fixturetest` / `verify-debug` were predicted
+  as *delete/modify* conflicts. **Actual:** they were *added on main after the merge base*
+  (never on dev/payments), so they came in cleanly as `A` (no conflict). `settle` +
+  `pending-slips` kept & re-guarded; the 3 debug routes `git rm`'d.
+- `src/types/betslip.ts` and `src/app/admin/page.tsx` were predicted as textual conflicts
+  but **auto-merged** (no markers). Audited both: `betslip.ts` auto-merge was a correct
+  union (kept); `admin/page.tsx` auto-merge had **silently dropped main's settlement
+  Review tab** → rewritten to graft it back and strip dead login plumbing.
+- `schema.sql` / `rls.sql` / `types/index.ts` / `Navigation.tsx` / `tipster/login` /
+  shared `admin/*` routes auto-merged to dev as forecast (no markers).
+
+**Cross-file fix not in the forecast:** parallel resolvers disagreed on the dead `tips`
+table — reconciled by trimming `api/tipster/[slug]/route.ts` to drop `getTipsByTipster`.
+
+**Validation:** `tsc --noEmit` clean (0 errors).

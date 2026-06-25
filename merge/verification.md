@@ -309,3 +309,41 @@ Main-verifier manual checks (§4.4) — PENDING.
   either branch — open bug unless the merge adds it (`main-settlement.md §8`).
 - Latent dead path: `fixture_id` fixture resolution has no backing column — optional
   high-value enhancement, not a regression.
+
+---
+
+## RESULTS (step e — as run)
+
+### Static
+- **`tsc --noEmit`: PASS (0 errors)** on the full merged tree, after one fix
+  (`tipster/dashboard` imported `supabaseBrowser` from the wrong module).
+- **Conflict markers:** none remain in `src/` or `supabase/` (grep-verified).
+- **Migration idempotency/safety:** adversarially reviewed — no unguarded
+  `create table/index/policy`, no `drop table/column/truncate`; one BLOCKER
+  (view create-or-replace) and one MEDIUM (transactions RLS) fixed.
+
+### Pending (needs DB + running services — gated on main-DB credentials)
+| Check | Status | Needs |
+|---|---|---|
+| `next build` (full route compile) | not run | clean env; low risk (tsc clean) |
+| `npm run test:e2e` (Playwright) | not run | local Supabase w/ migrations + worker + ioTec/football keys |
+| Apply migrations `20260626*` | not applied | main-DB creds; Supabase Auth enabled; `tipster_stats` dump; backfill inputs |
+| Both inputs → both verifiers (live) | not run | DB + bet-code worker + football API key |
+| Paywall secret-isolation (specs 03/04) | not run | DB + ioTec sandbox |
+
+### §7 preservation checklist — static confidence
+- [x] Ranking page (main) — merged, reads `tipster_stats`
+- [x] Screenshot input (main) — `parse-slip` + `ImageUpload` came in clean
+- [x] Booking-code input (dev) — `verifyCode` + worker untouched, additive
+- [x] Channels (main) — integrated, seed-hide preserved
+- [x] Bet worker entry-validation (dev) — untouched
+- [x] Football-API settlement (main) — `verify/route` + `footballApi` clean; **now also
+      grades code slips** via the `betslip_legs` projection seam
+- [x] Common match/leg model — `betslip_legs`, fed by both inputs
+- [x] ioTec payments (dev) — untouched, additive
+- [x] Admin: both main settlement Review tab + dev Slips/Verify/Txns — integrated
+- [x] Admin + app under dev Supabase Auth only — re-guarded
+- [~] Runs on main's DB extended w/ dev objects — migrations authored, **not applied**
+- [~] dev e2e suite passes — **not run** (needs services)
+
+(`[x]` = done + statically validated; `[~]` = built, runtime/DB validation pending.)
