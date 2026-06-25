@@ -34,5 +34,7 @@ export async function GET() {
     tipsterUsername: s.tipsters?.username ?? 'unknown',
   }))
 
-  return NextResponse.json({ slips: formatted })
+  // no-store: the feed is live (new slips, hides, results change constantly).
+  // Without it clients heuristically cache the response and show a stale feed.
+  return NextResponse.json({ slips: formatted }, { headers: { 'Cache-Control': 'no-store' } })
 }

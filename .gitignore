@@ -37,3 +37,11 @@ Thumbs.db
 **/screenshots/**
 
 **/testing-screenshots/**
+
+# playwright e2e
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+.e2e-app.log
+**.branches

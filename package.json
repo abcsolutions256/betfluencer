@@ -12,7 +12,8 @@
     "db:reset": "supabase db reset",
     "db:diff": "supabase db diff",
     "db:link": "supabase link",
-    "migrate": "supabase db push"
+    "migrate": "supabase db push",
+    "test:e2e": "bash scripts/e2e.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
@@ -26,6 +27,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
