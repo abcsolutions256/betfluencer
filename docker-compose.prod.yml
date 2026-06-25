@@ -34,6 +34,9 @@ services:
       BET_CODE_WORKER_KEY: ${BET_CODE_WORKER_KEY}
       SYNC_TOKEN: ${SYNC_TOKEN}
       SYNC_BATCH: ${SYNC_BATCH:-20}
+      # Stop re-scraping a 'failed' code after this many attempts (verified
+      # slips are never re-scraped — their selections are immutable).
+      SYNC_MAX_FAILED_RETRIES: ${SYNC_MAX_FAILED_RETRIES:-5}
       # Bookie scraper gets blocked from datacenter IPs — disable the code-sync
       # here and run it from a local stack. Payment reconcile is unaffected.
       SYNC_CODES_ENABLED: ${SYNC_CODES_ENABLED:-false}

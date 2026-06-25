@@ -26,20 +26,30 @@ async function handler(req: NextRequest) {
     return NextResponse.json({ ok: true, disabled: true, processed: 0, found: 0 })
   }
 
-  const db    = supabaseServer()
-  const batch = Number(process.env.SYNC_BATCH ?? 20)
+  const db       = supabaseServer()
+  const batch    = Number(process.env.SYNC_BATCH ?? 20)
+  const maxRetry = Number(process.env.SYNC_MAX_FAILED_RETRIES ?? 5)
 
   // The booking code + site live in betslip_secrets (service-role only) — NOT
   // on betslips (the overhaul moved them). Join betslips to re-verify only
-  // slips whose match hasn't finished yet (result 'pending'): the live,
-  // verifiable product. This keeps verified slips fresh and recovers any that
-  // are still 'pending' (e.g. the worker was down when first posted).
+  // slips whose match hasn't finished yet (result 'pending').
+  //
+  // Skip slips that already HAVE their match info: a booking code's
+  // selections are immutable, so once verification_status='verified' there's
+  // nothing to refresh — re-scraping wastes the worker and risks IP blocks.
+  // 'rejected' (admin-killed) is skipped too. We only sync slips still lacking
+  // match info: 'pending' (always) and 'failed' until verify_attempts hits the
+  // retry budget. The two embedded filters below encode that:
+  //   status in (pending, failed)  AND  verify_attempts < maxRetry
+  // (pending slips keep attempts=0, so the < filter never excludes them.)
   const { data: rows } = await db
     .from('betslip_secrets')
-    .select('betslip_id, betting_site, booking_code, betslips!inner(result)')
+    .select('betslip_id, betting_site, booking_code, betslips!inner(result, verification_status, verify_attempts)')
     .not('booking_code', 'is', null)
     .neq('booking_code', '')
     .eq('betslips.result', 'pending')
+    .in('betslips.verification_status', ['pending', 'failed'])
+    .lt('betslips.verify_attempts', maxRetry)
     .limit(batch)
 
   let processed = 0, found = 0

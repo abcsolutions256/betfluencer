@@ -127,9 +127,11 @@ export async function recordVerification(args: {
         ...(totalOdds != null ? { total_odds: totalOdds } : {}),   // odds are public proof, not a secret
       }).eq('id', args.betslip_id)
     } else if (result?.ok) {
-      await db.from('betslips').update({ verification_status: 'failed' })
-        .eq('id', args.betslip_id)
-        .eq('verification_status', 'pending')
+      // Worker ran but found nothing → bad/expired code. Atomically count the
+      // attempt and flip a still-'pending' slip to 'failed' (a 'failed' slip
+      // stays failed but its counter climbs). Never touches verified/rejected.
+      // The poller stops retrying once verify_attempts hits its budget.
+      await db.rpc('record_failed_verify', { p_betslip_id: args.betslip_id })
     }
   }
 
