@@ -1,4 +1,4 @@
-export type SlipResult  = 'pending' | 'win' | 'loss'
+export type SlipResult  = 'pending' | 'win' | 'loss' | 'void'
 export type PostingMode = 'manual' | 'screenshot' | 'booking_code'
 
 export interface SlipLeg {

@@ -11,6 +11,7 @@ function Chip({ children }: { children: React.ReactNode }) {
   return <span style={{ background: 'var(--bg3)', color: 'var(--offwhite)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, border: '1px solid var(--line)' }}>{children}</span>
 }
 
+// ── INLINE BUY FLOW (ioTec via usePayment — guest identity by x-buyer-key) ──
 function InlineBuyGate({ slip, tipsterName, onUnlock }: { slip: Betslip; tipsterName?: string; onUnlock: () => void }) {
   const { pay, sheet } = usePayment()
   async function buy() {
@@ -24,7 +25,7 @@ function InlineBuyGate({ slip, tipsterName, onUnlock }: { slip: Betslip; tipster
         <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Unlock to see the code &amp; picks</div>
       </div>
       <button onClick={buy} style={{ width: '100%', padding: 12, background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, cursor: 'pointer', fontSize: 14, fontWeight: 800 }}>
-        Buy slip · UGX {slip.slip_price.toLocaleString()}
+        Buy slip · UGX {(slip.slip_price ?? 0).toLocaleString()}
       </button>
       <div style={{ textAlign: 'center', marginTop: 6, fontSize: 10, color: 'var(--muted)' }}>One-time · Mobile Money or Card</div>
       {sheet}
@@ -32,18 +33,23 @@ function InlineBuyGate({ slip, tipsterName, onUnlock }: { slip: Betslip; tipster
   )
 }
 
+// ── BETSLIP CARD ─────────────────────────────────────────────────
+// Proof-only: this card NEVER renders booking_code / slip_image_url / legs from
+// the slip object. Revealed content is fetched server-side by <SlipReveal> only
+// when the buyer is entitled (finished / unlocked / owned).
 function BetslipCard({ slip, tipsterName, defaultOpen = false, owned = false, onPurchased }: { slip: Betslip; tipsterName?: string; defaultOpen?: boolean; owned?: boolean; onPurchased?: () => void }) {
   const [open, setOpen]         = useState(defaultOpen)
   const [unlocked, setUnlocked] = useState(false)
-  const finished = slip.result === 'win' || slip.result === 'loss'
+  const finished = slip.result === 'win' || slip.result === 'loss' || slip.result === 'void'
   const canView  = finished || unlocked || owned   // `owned` = already purchased (pre-loaded) → works cross-device
-  const risk     = getRiskLabel(slip.total_odds ?? 1)
+  const totalOdds = slip.total_odds ?? 0
+  const risk     = getRiskLabel(totalOdds || 1)
   const games    = slip.game_count ?? slip.leg_count ?? 0
   const leagues  = slip.leagues ?? []
   const markets  = slip.markets ?? []
 
   return (
-    <div style={{ background: 'var(--card)', borderRadius: 16, border: '1px solid var(--line)', marginBottom: 8, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--card)', borderRadius: 16, border: `1px solid ${totalOdds >= 10 ? 'rgba(245,166,35,0.35)' : 'var(--line)'}`, borderLeft: totalOdds >= 10 ? '3px solid var(--gold)' : undefined, marginBottom: 8, overflow: 'hidden' }}>
       <div style={{ padding: '12px 14px 10px', cursor: 'pointer' }} onClick={() => setOpen(!open)}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
           <div>
@@ -54,11 +60,16 @@ function BetslipCard({ slip, tipsterName, defaultOpen = false, owned = false, on
               {finished
                 ? <span style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>Free</span>
                 : <span style={{ background: 'var(--green-lt)', color: 'var(--green)', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, border: '1px solid rgba(46,204,122,0.3)' }}>✓ Verified</span>}
+              {(unlocked || owned) && !finished && (
+                <span style={{ background: 'rgba(46,204,122,0.1)', color: 'var(--green)', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>Unlocked ✓</span>
+              )}
             </div>
-            <div style={{ fontSize: 10, color: 'var(--muted)' }}>{new Date(slip.posted_at).toLocaleDateString('en-UG', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+            <div style={{ fontSize: 10, color: 'var(--muted)' }}>
+              {slip.posted_at ? new Date(slip.posted_at).toLocaleDateString('en-UG', { weekday: 'short', day: 'numeric', month: 'short' }) : ''}
+            </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--gold)' }}>{(slip.total_odds ?? 0).toFixed(2)}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--gold)' }}>{totalOdds.toFixed(2)}</div>
             <div style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 600 }}>total odds</div>
           </div>
         </div>

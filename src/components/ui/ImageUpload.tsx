@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef } from 'react'
-import { Upload, X, Camera, CheckCircle } from 'lucide-react'
+import { Upload, X, Camera, CheckCircle, Image } from 'lucide-react'
 import { fileToBase64 } from '@/lib/imageUpload'
 
 interface Props {
@@ -31,6 +31,8 @@ export function ImageUpload({ label, sublabel, accent = 'gold', onFile, preview,
   function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) handleFile(file)
+    // Reset input so same file can be re-selected
+    e.target.value = ''
   }
 
   function onDrop(e: React.DragEvent) {
@@ -62,13 +64,41 @@ export function ImageUpload({ label, sublabel, accent = 'gold', onFile, preview,
       onDragOver={e => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
-      style={{ border: `2px dashed ${dragging ? colors.icon : colors.border}`, borderRadius: 12, padding: '18px 12px', textAlign: 'center', cursor: 'pointer', background: dragging ? colors.bg : 'transparent', transition: 'all 0.15s', marginBottom: 10 }}
+      style={{
+        border: `2px dashed ${dragging ? colors.icon : colors.border}`,
+        borderRadius: 12,
+        padding: '18px 12px',
+        textAlign: 'center',
+        cursor: 'pointer',
+        background: dragging ? colors.bg : 'transparent',
+        transition: 'all 0.15s',
+        marginBottom: 10,
+        WebkitTapHighlightColor: 'transparent',
+      }}
     >
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={onInputChange} style={{ display: 'none' }} />
-      <Camera size={26} color={colors.icon} style={{ margin: '0 auto 8px', display: 'block' }} />
+      {/* 
+        No capture attribute = browser/OS handles it correctly:
+        - Android: shows "Gallery", "Files", "Camera" sheet
+        - iOS: shows "Photo Library", "Files", "Camera" sheet  
+        - Windows/Mac: opens file picker to browse storage
+        accept="image/*" restricts to images only across all platforms
+      */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+        onChange={onInputChange}
+        style={{ display: 'none' }}
+      />
+      <Image size={26} color={colors.icon} style={{ margin: '0 auto 8px', display: 'block' }} />
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--offwhite)', marginBottom: 3 }}>{label}</div>
       {sublabel && <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{sublabel}</div>}
-      <div style={{ fontSize: 10, color: 'var(--muted)' }}>Tap to upload from gallery · JPG · PNG · WEBP</div>
+      <div style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.6 }}>
+        📱 Tap to open gallery · 🖥️ Click to browse files
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+        JPG · PNG · WEBP · HEIC supported
+      </div>
     </div>
   )
 }

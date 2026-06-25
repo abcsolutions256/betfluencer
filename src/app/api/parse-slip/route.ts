@@ -1,4 +1,4 @@
-// ── Claude Vision — Betslip Screenshot Parser ─────────────────────
+// ── Claude Vision — Betslip Screenshot Parser ────────────────────
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { rateLimit, getClientIP, rateLimitResponse } from '@/lib/rateLimit'
@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
     const base64   = Buffer.from(buffer).toString('base64')
     const mimeType = (file.type || 'image/jpeg') as 'image/jpeg'|'image/png'|'image/webp'|'image/gif'
 
+    const today = new Date().toISOString().split('T')[0]
+
     const response = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 1500,
@@ -27,8 +29,7 @@ export async function POST(req: NextRequest) {
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-          { type: 'text', text: `You are reading a sports betting slip screenshot. Extract every leg/selection from this betslip.
-
+          { type: 'text', text: `Today's date is ${today}. You are reading a sports betting slip screenshot. Extract every leg/selection from this betslip.
 Return ONLY a valid JSON object with this exact structure, no other text:
 {
   "betting_site": "name of the betting platform",
@@ -46,10 +47,11 @@ Return ONLY a valid JSON object with this exact structure, no other text:
     }
   ]
 }
-
 Rules:
 - Extract ALL legs visible on the slip
-- For match_time: use today's date if only time shown, null if unclear
+- The "match" field MUST be in the exact format "Home Team vs Away Team" using the real team names shown. Do not abbreviate.
+- For match_time: ALWAYS provide a full date. If the slip shows a date, use it. If it shows only a time (e.g. "Today 18:30", "20:00"), combine it with today's date provided above. Only use null if there is genuinely no time or date anywhere on the slip. Format: YYYY-MM-DDTHH:MM:00Z
+- For pick: keep it simple and standard, e.g. "Over 2.5", "Under 3.5", "Both Teams To Score", "Home Win", "Draw", "Away Win". Strip away menu labels like "Over/Under | Full Time -".
 - For odds: decimal format only (1.95 not 19/10)
 - If total_odds not shown, multiply all leg odds together
 - Return only the JSON, no markdown, no explanation` },

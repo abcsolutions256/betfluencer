@@ -1,7 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { X, Camera } from 'lucide-react'
-import { resolveImageUrl } from '@/lib/imageUpload'
+import { X } from 'lucide-react'
 import type { Betslip } from '@/types/betslip'
 
 function Dot({ result }: { result: string }) {
@@ -17,7 +16,7 @@ export function WinRateBadge({
   slips: Betslip[]
 }) {
   const [open, setOpen] = useState(false)
-  const pct = (wins / total) * 100
+  const pct = total > 0 ? (wins / total) * 100 : 0
 
   const last15days = slips.filter(s => {
     const d = new Date(s.posted_at)
@@ -30,7 +29,6 @@ export function WinRateBadge({
 
   return (
     <>
-      {/* Tappable badge */}
       <div
         onClick={() => setOpen(true)}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--green-lt)', border: '1px solid rgba(46,204,122,0.3)', borderRadius: 10, padding: '5px 10px', cursor: 'pointer' }}
@@ -43,7 +41,6 @@ export function WinRateBadge({
         <span style={{ fontSize: 10, color: 'var(--muted)' }}>▸</span>
       </div>
 
-      {/* History sheet overlay */}
       {open && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
@@ -53,7 +50,6 @@ export function WinRateBadge({
             style={{ background: 'var(--bg2)', borderRadius: '18px 18px 0 0', width: '100%', maxWidth: 480, maxHeight: '80vh', overflowY: 'auto', padding: 16 }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)' }}>Win history</div>
@@ -64,7 +60,6 @@ export function WinRateBadge({
               </button>
             </div>
 
-            {/* Summary */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
               {[
                 { val: wonCount,     label: 'Won',     color: 'var(--green)' },
@@ -78,7 +73,6 @@ export function WinRateBadge({
               ))}
             </div>
 
-            {/* Slip history rows */}
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Betslip history</div>
 
             {last15days.length === 0 ? (

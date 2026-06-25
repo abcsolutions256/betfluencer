@@ -2,74 +2,11 @@
 import { useState, useEffect } from 'react'
 import {
   Shield, Home, Users, BarChart2, ShieldCheck,
-  Loader2, LogOut, CheckCircle, Receipt, Eye, EyeOff
+  Loader2, LogOut, Receipt, Eye, EyeOff, CheckCircle
 } from 'lucide-react'
 import type { TransactionRow, TxnStatus } from '@/types/payments'
 
-const SESSION_KEY = 'bf_admin_session'
-
-type AdminTab = 'overview' | 'ads' | 'tipsters' | 'revenue' | 'review' | 'transactions' | 'slips'
-
-// ── LOGIN ─────────────────────────────────────────────────────────
-function AdminLogin({ onLogin }: { onLogin: () => void }) {
-  const [password, setPassword] = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
-
-  async function login() {
-    if (!password) return
-    setLoading(true); setError('')
-    const res  = await fetch('/api/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    })
-    const data = await res.json()
-    if (data.token) {
-      localStorage.setItem(SESSION_KEY, data.token)
-      onLogin()
-    } else {
-      setError(data.error ?? 'Incorrect password')
-    }
-    setLoading(false)
-  }
-
-  return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 360 }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--gold)', marginBottom: 4 }}>
-            bet<span style={{ color: 'var(--offwhite)', fontWeight: 300 }}>fluencer</span>
-          </div>
-          <div style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '14px auto 12px' }}>
-            <Shield size={26} color="var(--gold)" />
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--white)', marginBottom: 4 }}>Admin access</div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>Betfluencer HQ — restricted</div>
-        </div>
-        <div className="card">
-          <label className="lbl">Admin password</label>
-          <input
-            className="inp"
-            type="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && login()}
-            style={{ marginBottom: 14 }}
-          />
-          {error && <div style={{ color: 'var(--red)', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{error}</div>}
-          <button className="btn-gold" style={{ opacity: !password ? 0.4 : 1 }} onClick={login}>
-            {loading ? <Loader2 size={16} className="spin" /> : <Shield size={16} />} Enter admin panel
-          </button>
-        </div>
-        <div style={{ textAlign: 'center', marginTop: 14, fontSize: 11, color: 'var(--muted)' }}>
-          Never share this password with anyone.
-        </div>
-      </div>
-    </div>
-  )
-}
+type AdminTab = 'overview' | 'ads' | 'tipsters' | 'slips' | 'transactions' | 'revenue' | 'verify' | 'review'
 
 // ── STAT CARD ─────────────────────────────────────────────────────
 function StatCard({ val, label, color = 'var(--white)', sub }: { val: string; label: string; color?: string; sub?: string }) {
@@ -82,27 +19,27 @@ function StatCard({ val, label, color = 'var(--white)', sub }: { val: string; la
   )
 }
 
-
-
-// ── REVIEW TAB ────────────────────────────────────────────────────
-function ReviewTab({ token }: { token: string }) {
+// ── VERIFY TAB (leg-level review) ─────────────────────────────────
+// Legs the football API couldn't auto-verify (player-specific markets).
+// Admin marks each leg win/loss manually via /api/admin/review.
+function VerifyTab() {
   const [legs, setLegs] = useState<any[]>([])
 
   useEffect(() => {
-    fetch('/api/admin/review', { headers: { 'x-admin-token': token } })
+    fetch('/api/admin/review')
       .then(r => r.json()).then(d => setLegs(d.legs ?? []))
       .catch(() => {})
-  }, [token])
+  }, [])
 
   async function mark(legId: string, result: 'win' | 'loss') {
-    await fetch('/api/admin/review', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify({ legId, result }) })
+    await fetch('/api/admin/review', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ legId, result }) })
     setLegs(prev => prev.filter(l => l.id !== legId))
   }
 
   return (
     <>
       <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: 'var(--offwhite)', lineHeight: 1.6 }}>
-        ⚠️ These legs couldn't be auto-verified — player-specific markets. Mark each manually after checking.
+        ⚠️ These legs couldn&apos;t be auto-verified — player-specific markets. Mark each manually after checking.
       </div>
       {legs.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>
@@ -110,7 +47,7 @@ function ReviewTab({ token }: { token: string }) {
           <div style={{ fontSize: 14, fontWeight: 600 }}>Nothing to review</div>
           <div style={{ fontSize: 12, marginTop: 4 }}>All legs are verified</div>
         </div>
-      ) : legs.map((leg, i) => (
+      ) : legs.map(leg => (
         <div key={leg.id} className="card" style={{ borderLeft: '3px solid var(--gold)', marginBottom: 10 }}>
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)', marginBottom: 2 }}>{leg.match}</div>
@@ -127,15 +64,104 @@ function ReviewTab({ token }: { token: string }) {
   )
 }
 
+// ── REVIEW / SETTLEMENT TAB ──────────────────────────────────────
+// Shows all pending slips. Admin settles each: Won / Lost / Void.
+// Auto-verify tries the football API first (POST /api/verify), then the
+// remainder are settled manually via POST /api/admin/settle.
+function ReviewTab() {
+  const [slips, setSlips]     = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId]   = useState<string | null>(null)
+  const [verifying, setVerifying] = useState(false)
+
+  function load() {
+    setLoading(true)
+    fetch(`/api/admin/pending-slips?t=${Date.now()}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => { setSlips(d.slips ?? []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function settle(slipId: string, result: 'win' | 'loss' | 'void') {
+    setBusyId(slipId)
+    await fetch('/api/admin/settle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slip_id: slipId, result }),
+    })
+    setSlips(prev => prev.filter(s => s.id !== slipId))
+    setBusyId(null)
+  }
+
+  async function autoVerify() {
+    setVerifying(true)
+    await fetch('/api/verify', { method: 'POST' })
+    setVerifying(false)
+    load()
+  }
+
+  return (
+    <>
+      <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: 'var(--offwhite)', lineHeight: 1.6 }}>
+        Pending slips awaiting settlement. Auto-verify tries the football API first; settle the rest manually.
+      </div>
+
+      <button onClick={autoVerify} disabled={verifying} style={{ width: '100%', padding: '10px', background: 'var(--bg3)', color: 'var(--gold)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        {verifying ? <><Loader2 size={14} className="spin" /> Verifying...</> : <><CheckCircle size={14} /> Run auto-verification</>}
+      </button>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          <Loader2 size={24} color="var(--gold)" className="spin" style={{ margin: '0 auto', display: 'block' }} />
+        </div>
+      ) : slips.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>✓</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Nothing pending</div>
+          <div style={{ fontSize: 12, marginTop: 4 }}>All slips are settled</div>
+        </div>
+      ) : slips.map(slip => (
+        <div key={slip.id} className="card" style={{ borderLeft: '3px solid var(--gold)', marginBottom: 10 }}>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)', marginBottom: 2 }}>
+              {slip.betting_site || 'Betslip'} · {slip.leg_count || slip.legs?.length || 0} legs · ×{(slip.total_odds || 0).toFixed(2)}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6 }}>
+              {slip.tipster_name ?? 'Unknown'} · {slip.booking_code ? `Code ${slip.booking_code}` : slip.posting_mode} · UGX {(slip.slip_price || 0).toLocaleString()}
+            </div>
+            {slip.legs?.map((leg: any, i: number) => (
+              <div key={i} style={{ fontSize: 11, color: 'var(--offwhite)', padding: '3px 0', borderTop: i > 0 ? '1px solid var(--line)' : 'none' }}>
+                {leg.match} · <span style={{ color: 'var(--gold)' }}>{leg.pick}</span>
+                {leg.result && leg.result !== 'pending' && (
+                  <span style={{ color: leg.result === 'win' ? 'var(--green)' : 'var(--red)', marginLeft: 6, fontWeight: 700 }}>
+                    {leg.result === 'win' ? '✓' : '✗'}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            <button disabled={busyId === slip.id} onClick={() => settle(slip.id, 'win')} style={{ padding: '9px', background: 'var(--green-lt)', color: 'var(--green)', border: '1px solid rgba(46,204,122,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', opacity: busyId === slip.id ? 0.5 : 1 }}>✓ Won</button>
+            <button disabled={busyId === slip.id} onClick={() => settle(slip.id, 'loss')} style={{ padding: '9px', background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', opacity: busyId === slip.id ? 0.5 : 1 }}>✗ Lost</button>
+            <button disabled={busyId === slip.id} onClick={() => settle(slip.id, 'void')} style={{ padding: '9px', background: 'var(--bg3)', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', opacity: busyId === slip.id ? 0.5 : 1 }}>Void</button>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
 // ── REVENUE TAB ───────────────────────────────────────────────────
-function RevenueTab({ token }: { token: string }) {
+function RevenueTab() {
   const [data, setData] = useState<any>({ total: 0, commission: 0, purchases: [], tipsters: [] })
 
   useEffect(() => {
-    fetch('/api/admin/revenue', { headers: { 'x-admin-token': token } })
+    fetch('/api/admin/revenue')
       .then(r => r.json()).then(d => setData(d))
       .catch(() => {})
-  }, [token])
+  }, [])
 
   return (
     <>
@@ -171,7 +197,7 @@ function RevenueTab({ token }: { token: string }) {
 }
 
 // ── TIPSTERS TAB ──────────────────────────────────────────────────
-function TipstersTab({ token }: { token: string }) {
+function TipstersTab() {
   const [tipsters,     setTipsters]     = useState<any[]>([])
   const [signupsOpen,  setSignupsOpen]  = useState(false)
   const [showCreate,   setShowCreate]   = useState(false)
@@ -185,12 +211,12 @@ function TipstersTab({ token }: { token: string }) {
 
   useEffect(() => {
     fetch('/api/admin/settings').then(r => r.json()).then(d => { setSignupsOpen(d.publicSignupsEnabled ?? false); setCommission(d.platform_commission ?? 0.10) })
-    fetch('/api/admin/tipsters', { headers: { 'x-admin-token': token } }).then(r => r.json()).then(d => setTipsters(d.tipsters ?? []))
-  }, [token])
+    fetch('/api/admin/tipsters').then(r => r.json()).then(d => setTipsters(d.tipsters ?? []))
+  }, [])
 
   async function toggleSignups() {
     setToggling(true)
-    const res = await fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify({ publicSignupsEnabled: !signupsOpen }) })
+    const res = await fetch('/api/admin/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ publicSignupsEnabled: !signupsOpen }) })
     const d = await res.json()
     setSignupsOpen(d.settings?.publicSignupsEnabled ?? !signupsOpen)
     setToggling(false)
@@ -210,7 +236,7 @@ function TipstersTab({ token }: { token: string }) {
     if (!form.name || !form.phone || !form.password) return
     setLoading(true)
     setCreateError('')
-    const res  = await fetch('/api/admin/tipsters', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify(form) })
+    const res  = await fetch('/api/admin/tipsters', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     const data = await res.json()
     setLoading(false)
     if (data.success) {
@@ -224,13 +250,13 @@ function TipstersTab({ token }: { token: string }) {
   }
 
   async function toggleVerified(id: string, verified: boolean) {
-    await fetch('/api/admin/tipsters', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify({ id, verified: !verified }) })
+    await fetch('/api/admin/tipsters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, verified: !verified }) })
     setTipsters(prev => prev.map(t => t.id === id ? { ...t, verified: !verified } : t))
   }
 
   async function deleteTipster(id: string) {
     if (!confirm('Remove this tipster?')) return
-    await fetch('/api/admin/tipsters', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'x-admin-token': token }, body: JSON.stringify({ id }) })
+    await fetch('/api/admin/tipsters', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     setTipsters(prev => prev.filter(t => t.id !== id))
   }
 
@@ -382,7 +408,7 @@ function txnStatusStyle(status: TxnStatus): { bg: string; color: string; border:
   }
 }
 
-function TransactionsTab({ token }: { token: string }) {
+function TransactionsTab() {
   const [status,  setStatus]  = useState<'' | TxnStatus>('')
   const [rows,    setRows]    = useState<AdminTxnRow[]>([])
   const [count,   setCount]   = useState(0)
@@ -393,7 +419,7 @@ function TransactionsTab({ token }: { token: string }) {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch(`/api/admin/transactions?status=${status}&limit=${PAGE_SIZE}&offset=0`, { headers: { 'x-admin-token': token } })
+    fetch(`/api/admin/transactions?status=${status}&limit=${PAGE_SIZE}&offset=0`)
       .then(r => r.json())
       .then(d => {
         if (cancelled) return
@@ -403,12 +429,12 @@ function TransactionsTab({ token }: { token: string }) {
       .catch(() => { if (!cancelled) { setRows([]); setCount(0) } })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [token, status])
+  }, [status])
 
   async function loadMore() {
     setMore(true)
     try {
-      const res = await fetch(`/api/admin/transactions?status=${status}&limit=${PAGE_SIZE}&offset=${rows.length}`, { headers: { 'x-admin-token': token } })
+      const res = await fetch(`/api/admin/transactions?status=${status}&limit=${PAGE_SIZE}&offset=${rows.length}`)
       const d   = await res.json()
       setRows(prev => [...prev, ...(d.transactions ?? [])])
       if (typeof d.count === 'number') setCount(d.count)
@@ -529,20 +555,20 @@ function TxnField({ label, value, mono, capitalize, span2 }: { label: string; va
 // All slips are shown on the marketplace by default; hide a stale/expired one
 // here to pull it (kickoff times aren't reliable across bookies, so removal is
 // manual). Hidden slips stay on the tipster's own dashboard, tagged "Hidden".
-function SlipsTab({ token }: { token: string }) {
+function SlipsTab() {
   const [slips, setSlips]     = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/admin/slips', { headers: { 'x-admin-token': token } })
+    fetch('/api/admin/slips')
       .then(r => r.json()).then(d => setSlips(d.slips ?? [])).catch(() => {}).finally(() => setLoading(false))
-  }, [token])
+  }, [])
 
   async function toggle(id: string, hidden: boolean) {
     setBusy(id)
     const r = await fetch('/api/admin/slips', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ betslip_id: id, hidden }),
     })
     if (r.ok) setSlips(s => s.map(x => x.id === id ? { ...x, hidden } : x))
@@ -640,7 +666,8 @@ export default function AdminPage() {
           { key: 'slips',        icon: EyeOff,       label: 'Slips'    },
           { key: 'transactions', icon: Receipt,      label: 'Txns'     },
           { key: 'revenue',      icon: BarChart2,    label: 'Revenue'  },
-          { key: 'review',       icon: ShieldCheck,  label: 'Review'   },
+          { key: 'verify',       icon: ShieldCheck,  label: 'Verify'   },
+          { key: 'review',       icon: CheckCircle,  label: 'Settle'   },
         ] as { key: AdminTab; icon: any; label: string }[]).map(({ key, icon: Icon, label }) => (
           <button key={key} onClick={() => setTab(key)} style={{ flex: 1, padding: '10px 4px 8px', border: 'none', background: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, borderBottom: `2px solid ${tab === key ? 'var(--gold)' : 'transparent'}` }}>
             <Icon size={17} color={tab === key ? 'var(--gold)' : 'rgba(255,255,255,0.3)'} />
@@ -687,29 +714,22 @@ export default function AdminPage() {
         )}
 
         {/* ── TIPSTERS ── */}
-        {tab === 'tipsters' && (
-          <TipstersTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
-        )}
+        {tab === 'tipsters' && <TipstersTab />}
 
         {/* ── SLIPS ── */}
-        {tab === 'slips' && (
-          <SlipsTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
-        )}
+        {tab === 'slips' && <SlipsTab />}
 
         {/* ── TRANSACTIONS ── */}
-        {tab === 'transactions' && (
-          <TransactionsTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
-        )}
-
-        {/* ── REVIEW ── */}
-        {tab === 'review' && (
-          <ReviewTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
-        )}
+        {tab === 'transactions' && <TransactionsTab />}
 
         {/* ── REVENUE ── */}
-        {tab === 'revenue' && (
-          <RevenueTab token={localStorage.getItem(SESSION_KEY) ?? ''} />
-        )}
+        {tab === 'revenue' && <RevenueTab />}
+
+        {/* ── VERIFY (leg-level review) ── */}
+        {tab === 'verify' && <VerifyTab />}
+
+        {/* ── SETTLE (slip settlement) ── */}
+        {tab === 'review' && <ReviewTab />}
       </div>
     </div>
   )

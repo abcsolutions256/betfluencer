@@ -11,7 +11,7 @@ export async function getAllTipsters(): Promise<TipsterPublic[]> {
   if (!db) return MOCK_TIPSTERS
 
   const { data, error } = await db
-    .from('tipster_rankings')
+    .from('tipster_stats')
     .select('*')
     .order('score', { ascending: false })
 
@@ -23,13 +23,23 @@ export async function getTipsterByIdentifier(slug: string): Promise<TipsterPubli
   const db = supabaseServer()
   if (!db) return null
 
-  const { data } = await db
-    .from('tipster_rankings')
+  // Try username first (maybeSingle returns null instead of throwing on no match)
+  const { data: byUsername } = await db
+    .from('tipster_stats')
     .select('*')
-    .or(`username.ilike.${slug},id.eq.${slug}`)
-    .single()
+    .ilike('username', slug)
+    .maybeSingle()
 
-  return data ?? null
+  if (byUsername) return byUsername
+
+  // Try UUID
+  const { data: byId } = await db
+    .from('tipster_stats')
+    .select('*')
+    .eq('id', slug)
+    .maybeSingle()
+
+  return byId ?? null
 }
 
 // ── TIPSTER AUTH ─────────────────────────────────────────────────

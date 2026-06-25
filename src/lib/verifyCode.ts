@@ -10,6 +10,53 @@ import { supabaseServer } from './supabase'
 
 const uniq = (arr: any[]) => Array.from(new Set(arr.filter(Boolean)))
 
+// Build a `pick` string main's football-API settler (determineResult in
+// src/lib/footballApi.ts) can grade, from a Gemini-normalised leg. The settler
+// keyword-matches a lowercased pick (e.g. "over 2.5", "btts yes", "home win",
+// "home or draw", "<team> -1", "<team> clean sheet"); canonical market codes
+// alone ("OU"/"BTTS") would grade as 'unverifiable'. Unsupported markets
+// (DNB/OTHER) fall through to a best-effort label → settler returns
+// 'unverifiable' → routed to admin manual review. Keep in step with the
+// market coverage in footballApi.ts:determineResult.
+function pickForLeg(n: NormalizedLeg): string {
+  const market = (n.market ?? '').toUpperCase()
+  const sym    = (n.pickSymbol ?? '').toString().trim()
+  const side   = (n.pickSide ?? '').toString().toLowerCase()
+  const line   = (n.line ?? '').toString().trim()
+  const team   = (n.pickTeam ?? '').toString().trim()
+  const label  = (n.marketLabel ?? '').toString().trim()
+  switch (market) {
+    case 'OU': {
+      const dir = /under/i.test(`${sym} ${label}`) ? 'under' : 'over'
+      const ln  = line || (`${sym} ${label}`.match(/(\d+\.?\d*)/)?.[1] ?? '')
+      return `${dir} ${ln}`.trim()
+    }
+    case 'BTTS':
+      return /\b(no|not)\b/i.test(sym) ? 'btts no' : 'btts yes'
+    case '1X2':
+      if (side === 'home' || sym === '1') return 'home win'
+      if (side === 'away' || sym === '2') return 'away win'
+      if (side === 'draw' || /^x$/i.test(sym)) return 'draw'
+      return (sym || label).toLowerCase()
+    case 'DC': {
+      const s = `${sym} ${label}`.toLowerCase().replace(/\s+/g, '')
+      if (s.includes('1x')) return 'home or draw'
+      if (s.includes('x2')) return 'away or draw'
+      if (s.includes('12')) return 'home or away'
+      return label.toLowerCase()
+    }
+    case 'AH':
+    case 'EH': {
+      const ln = line || (sym.match(/[+-]?\d+\.?\d*/)?.[0] ?? '')
+      return `${team || side} ${ln}`.trim()
+    }
+    case 'CS':
+      return `${team || side} clean sheet`.trim()
+    default:
+      return (label || sym || n.summary || '').toLowerCase().trim()
+  }
+}
+
 export interface NormalizedLeg {
   teams?: string
   homeTeam?: string
@@ -126,6 +173,50 @@ export async function recordVerification(args: {
         earliest_kickoff:    kicks.length ? new Date(Math.min(...kicks)).toISOString() : null,
         ...(totalOdds != null ? { total_odds: totalOdds } : {}),   // odds are public proof, not a secret
       }).eq('id', args.betslip_id)
+
+      // ── Unified-settlement seam (merge: stag ← main) ──────────────────
+      // Project the scraped legs into betslip_legs — the common match/leg
+      // model main's football-API settler (/api/verify) grades — so a
+      // booking-code slip settles exactly like a screenshot/manual slip.
+      // Replace-then-insert keyed on betslip_id, so a re-scrape refreshes
+      // them. Settlement keys on `match` ("Home vs Away"), `pick`,
+      // `match_time`; per-leg `odds` is best-effort (the settler ignores it;
+      // betslips.total_odds is the authoritative public figure).
+      const legRows = (useNorm
+        ? normalized.map((n) => {
+            const homeT = (n.homeTeam ?? '').toString().trim()
+            const awayT = (n.awayTeam ?? '').toString().trim()
+            const match = homeT && awayT ? `${homeT} vs ${awayT}` : (n.teams ?? '').toString().trim()
+            const odds  = n.odds != null ? Number(String(n.odds).replace(/[^\d.]/g, '')) : NaN
+            const kk    = n.kickoff && !Number.isNaN(Date.parse(n.kickoff)) ? new Date(n.kickoff).toISOString() : null
+            return { match, pick: pickForLeg(n), odds, match_time: kk }
+          })
+        : rawMatches.map((m: any) => {
+            const homeT = (m?.homeTeam ?? m?.home ?? '').toString().trim()
+            const awayT = (m?.awayTeam ?? m?.away ?? '').toString().trim()
+            const match = homeT && awayT ? `${homeT} vs ${awayT}` : (m?.teams ?? m?.match ?? '').toString().trim()
+            const odds  = m?.odds != null ? Number(String(m.odds).replace(/[^\d.]/g, '')) : NaN
+            const kk    = (m?.kickoff ?? m?.match_time)
+            const iso   = kk && !Number.isNaN(Date.parse(kk)) ? new Date(kk).toISOString() : null
+            return { match, pick: (m?.pick ?? m?.marketLabel ?? '').toString().toLowerCase().trim(), odds, match_time: iso }
+          })
+      )
+        .map((l, i) => ({
+          betslip_id: args.betslip_id!,
+          match:      l.match,
+          league:     (rawMatches[i]?.league ?? '').toString(),   // normaliser drops league
+          pick:       l.pick,
+          odds:       Number.isFinite(l.odds) ? l.odds : 1,        // betslip_legs.odds is NOT NULL
+          match_time: l.match_time,
+          result:     'pending' as const,
+        }))
+        .filter((l) => l.match && l.pick)                          // settler needs both match + pick
+
+      if (legRows.length) {
+        await db.from('betslip_legs').delete().eq('betslip_id', args.betslip_id)
+        const { error: legErr } = await db.from('betslip_legs').insert(legRows)
+        if (legErr) console.error('[verifyCode] betslip_legs projection failed:', legErr.message)
+      }
     } else if (result?.ok) {
       // Worker ran but found nothing → bad/expired code. Atomically count the
       // attempt and flip a still-'pending' slip to 'failed' (a 'failed' slip

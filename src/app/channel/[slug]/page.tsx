@@ -18,11 +18,12 @@ export default function ChannelPage() {
   const [tab,     setTab]     = useState<'slips' | 'about'>('slips')
   const [loading, setLoading] = useState(true)
 
-  // Fetch slips, passing the buyer identity so paid slips come back unlocked.
+  // Fetch the tipster's betslips. Public PROOF only — secrets stay server-side
+  // and are unlocked per-slip via /reveal. Exposed as a callback so a fresh
+  // purchase can re-pull the feed (onPurchased) and reveal the bought slip.
   const loadSlips = useCallback(() => {
     if (!slug) return
-    const buyer = typeof window !== 'undefined' ? localStorage.getItem('bf_phone') ?? '' : ''
-    fetch(`/api/tipster/${slug}/slips?buyer=${encodeURIComponent(buyer)}`)
+    fetch(`/api/tipster/${slug}/slips`)
       .then(r => r.json())
       .then(d => { if (d.slips) setSlips(d.slips) })
       .finally(() => setLoading(false))
@@ -34,6 +35,7 @@ export default function ChannelPage() {
     fetch(`/api/tipster/${slug}`)
       .then(r => r.json())
       .then(d => { if (d.tipster) setTipster(d.tipster) })
+
     // Fetch their betslips (gated server-side)
     loadSlips()
   }, [slug, loadSlips])
@@ -43,6 +45,10 @@ export default function ChannelPage() {
       <Loader2 size={32} color="var(--gold)" className="spin" />
     </div>
   )
+
+  const wins    = tipster.wins_last_10 ?? 0
+  const losses  = (tipster as any).losses ?? 0
+  const settled = wins + losses
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -59,7 +65,7 @@ export default function ChannelPage() {
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>@{tipster.username} · {tipster.sport}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <WinRateBadge wins={tipster.wins_last_10 ?? 0} total={10} slips={slips} />
+              <WinRateBadge wins={wins} total={settled} slips={slips} />
               <span className="pill-muted">{(tipster.subscriber_count ?? 0).toLocaleString()} fans</span>
             </div>
           </div>
@@ -88,11 +94,11 @@ export default function ChannelPage() {
           <div className="card">
             <div style={{ fontSize: 14, color: 'var(--offwhite)', lineHeight: 1.7, marginBottom: 14 }}>{tipster.description}</div>
             {[
-              { label: 'Username',       val: `@${tipster.username}` },
-              { label: 'Covers',         val: tipster.sport },
-              { label: 'Wins (last 10)', val: `${tipster.wins_last_10 ?? 0}/10` },
-              { label: 'Avg odds',       val: `${(tipster.avg_odds ?? 0).toFixed(1)}x` },
-              { label: 'Fans',           val: (tipster.subscriber_count ?? 0).toLocaleString() },
+              { label: 'Username',  val: `@${tipster.username}` },
+              { label: 'Covers',    val: tipster.sport || 'Football' },
+              { label: 'Win rate',  val: settled > 0 ? `${Math.round(wins / settled * 100)}% (${wins}/${settled})` : '—' },
+              { label: 'Avg odds',  val: `${(tipster.avg_odds ?? 0).toFixed(2)}x` },
+              { label: 'Fans',      val: (tipster.subscriber_count ?? 0).toLocaleString() },
             ].map((r, i) => (
               <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < 4 ? '1px solid var(--line)' : 'none' }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>{r.label}</span>

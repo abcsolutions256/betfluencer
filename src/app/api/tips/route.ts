@@ -24,10 +24,18 @@ export async function POST(req: NextRequest) {
     const inserted: any[] = []
 
     for (const slip of slips) {
+      // Input method, by priority: booking_code -> screenshot -> manual
       const mode: 'booking_code' | 'screenshot' | 'manual' =
         slip.booking_code ? 'booking_code' : slip.slip_image_url ? 'screenshot' : 'manual'
       const legs: any[] = slip.legs ?? []
       const status = mode === 'booking_code' ? 'pending' : 'verified'
+
+      const totalOdds = slip.total_odds !== '' && slip.total_odds != null
+        ? parseFloat(slip.total_odds) : null
+      const legCount = legs.length
+        ? legs.length
+        : (slip.leg_count !== '' && slip.leg_count != null
+          ? parseInt(slip.leg_count) : null)
 
       // 1) the betslip (NO secret columns)
       const { data: bs, error } = await db
@@ -35,8 +43,8 @@ export async function POST(req: NextRequest) {
         .insert({
           tipster_id:          tipster.id,
           posting_mode:        mode,
-          total_odds:          slip.total_odds ? parseFloat(slip.total_odds) : null,
-          leg_count:           legs.length || (slip.leg_count ? parseInt(slip.leg_count) : null),
+          total_odds:          totalOdds,
+          leg_count:           legCount,
           slip_price:          slip.slip_price ?? 1000,
           note:                slip.note ?? '',
           result:              'pending',
@@ -49,7 +57,10 @@ export async function POST(req: NextRequest) {
         })
         .select()
         .single()
-      if (error) return NextResponse.json({ error: 'Could not save slip: ' + error.message }, { status: 500 })
+      if (error) {
+        console.error('Slip insert error:', error)
+        return NextResponse.json({ error: 'Could not save slip: ' + error.message }, { status: 500 })
+      }
 
       // 2) the secret (booking code/site or screenshot URL)
       if (slip.booking_code || slip.slip_image_url) {
@@ -63,7 +74,7 @@ export async function POST(req: NextRequest) {
 
       // 3) manual legs
       if (legs.length) {
-        await db.from('betslip_legs').insert(legs.map((l: any) => ({
+        const { error: legsError } = await db.from('betslip_legs').insert(legs.map((l: any) => ({
           betslip_id: bs.id,
           match:      l.match ?? '',
           league:     l.league ?? '',
@@ -72,6 +83,7 @@ export async function POST(req: NextRequest) {
           match_time: l.match_time || null,
           result:     'pending',
         })))
+        if (legsError) console.error('Legs insert error:', legsError)
       }
 
       // 4) booking-code slips: verify against the bookie (sets verified + proof on success)

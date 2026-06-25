@@ -8,7 +8,11 @@ type TipsterRow = {
   username: string
   sport: string
   wins_last_10: number
+  losses: number
+  slips_posted: number
   avg_odds: number
+  roi: number
+  last5: string
   subscriber_count: number
   tick_type: string | null
   verified: boolean
@@ -28,19 +32,49 @@ function winPctColor(pct: number): string {
   return '#b91c1c'
 }
 
-function Dot({ result }: { result: 'W' | 'L' }) {
-  const cfg = result === 'W'
-    ? { bg: '#16a34a', color: '#fff' }
-    : { bg: '#dc2626', color: '#fff' }
+function ResultDots({ last5 }: { last5: string }) {
+  const results = last5 ? last5.split(',').filter(Boolean) : []
+  if (results.length === 0) {
+    return <span style={{ fontSize: 11, color: '#9ca3af' }}>—</span>
+  }
   return (
-    <span style={{ width: 22, height: 22, borderRadius: '50%', background: cfg.bg, color: cfg.color, fontSize: 9, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      {result}
-    </span>
+    <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+      {results.map((r, i) => {
+        const bg = r === 'W' ? '#16c60c' : r === 'L' ? '#ff2d2d' : '#f5a623'
+        return (
+          <span
+            key={i}
+            title={r === 'W' ? 'Won' : r === 'L' ? 'Lost' : 'Pending'}
+            style={{
+              width: 14, height: 14, borderRadius: '50%',
+              background: bg,
+              boxShadow: `0 0 4px ${bg}`,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 8, fontWeight: 800, color: '#fff', flexShrink: 0,
+            }}
+          >
+            {r}
+          </span>
+        )
+      })}
+    </div>
   )
+}
+
+function streakLabel(last5: string): { text: string; color: string } {
+  const results = last5 ? last5.split(',').filter(Boolean) : []
+  if (results.length === 0) return { text: '—', color: '#9ca3af' }
+  const first = results[0]
+  let n = 0
+  for (const r of results) { if (r === first) n++; else break }
+  if (first === 'W') return { text: `W${n}`, color: '#16a34a' }
+  if (first === 'L') return { text: `L${n}`, color: '#dc2626' }
+  return { text: `P${n}`, color: '#d97706' }
 }
 
 const cell: React.CSSProperties = { padding: '10px 6px', textAlign: 'center', fontSize: 12, color: '#111827', borderBottom: '1px solid #e5e7eb' }
 const cellL: React.CSSProperties = { ...cell, textAlign: 'left' }
+const th: React.CSSProperties = { fontSize: 10, color: '#9ca3af', fontWeight: 500 }
 
 const COLORS = ['#2ECC7A', '#F5A623', '#4A9EFF', '#FF6B6B', '#a855f7', '#3b82f6']
 
@@ -53,11 +87,12 @@ export default function RankingsPage() {
     fetch('/api/tipster', { cache: 'no-store' })
       .then(r => r.json())
       .then(d => {
-        const sorted = (d.tipsters ?? []).sort((a: TipsterRow, b: TipsterRow) => {
-          const scoreA = (a.wins_last_10 / 10) * (a.avg_odds || 1)
-          const scoreB = (b.wins_last_10 / 10) * (b.avg_odds || 1)
-          return scoreB - scoreA
-        })
+        const scoreOf = (t: TipsterRow) => {
+          const settled = (t.wins_last_10 ?? 0) + (t.losses ?? 0)
+          const winRate = settled > 0 ? t.wins_last_10 / settled : 0
+          return winRate * (t.avg_odds || 1)
+        }
+        const sorted = (d.tipsters ?? []).sort((a: TipsterRow, b: TipsterRow) => scoreOf(b) - scoreOf(a))
         setTipsters(sorted)
         setLoading(false)
       })
@@ -66,6 +101,12 @@ export default function RankingsPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
+      <style>{`
+        /* Hide lower-priority columns on mobile, keep on desktop */
+        @media (max-width: 640px) {
+          .rk-optional { display: none !important; }
+        }
+      `}</style>
       <TopBar />
       <main className="flex-1 overflow-y-auto pb-6">
 
@@ -105,27 +146,35 @@ export default function RankingsPage() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>Loading rankings...</div>
         ) : (
-          <div style={{ overflowX: 'auto', background: '#fff' }}>
+          <div style={{ overflowX: 'auto', background: '#fff', WebkitOverflowScrolling: 'touch' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                  <th style={{ ...cellL, width: 36, padding: '8px 4px 8px 8px', fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>#</th>
-                  <th style={{ ...cellL, minWidth: 120, fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>Tipster</th>
-                  <th style={{ ...cell, width: 28, fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>W</th>
-                  <th style={{ ...cell, width: 46, fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>Odds</th>
-                  <th style={{ ...cell, width: 40, fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>Win%</th>
-                  {showExtra && <th style={{ ...cell, width: 42, fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>Score</th>}
+                  <th style={{ ...cellL, ...th, width: 36, padding: '8px 4px 8px 8px' }}>#</th>
+                  <th style={{ ...cellL, ...th, minWidth: 120 }}>Tipster</th>
+                  <th style={{ ...cell, ...th, width: 38 }}>Slips</th>
+                  <th style={{ ...cell, ...th, width: 28 }}>W</th>
+                  <th className="rk-optional" style={{ ...cell, ...th, width: 28 }}>L</th>
+                  <th style={{ ...cell, ...th, width: 44 }}>Win%</th>
+                  <th style={{ ...cell, ...th, width: 46 }}>Odds</th>
+                  <th style={{ ...cell, ...th, width: 56 }}>ROI</th>
+                  <th className="rk-optional" style={{ ...cell, ...th, width: 56 }}>Streak</th>
+                  <th style={{ ...cell, ...th, width: 88 }}>Last 5</th>
+                  {showExtra && <th style={{ ...cell, ...th, width: 50 }}>Score</th>}
                 </tr>
               </thead>
               <tbody>
                 {tipsters.map((t, i) => {
                   const rank = i + 1
                   const barColor = zoneColor(rank, tipsters.length)
-                  const winPct = t.wins_last_10 / 10
+                  const settled = (t.wins_last_10 ?? 0) + (t.losses ?? 0)
+                  const winPct = settled > 0 ? t.wins_last_10 / settled : 0
                   const score = winPct * (t.avg_odds || 1)
                   const avatar = t.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
                   const color = COLORS[i % COLORS.length]
                   const rowBg = i % 2 === 0 ? '#ffffff' : '#f9fafb'
+                  const streak = streakLabel(t.last5 ?? '')
+                  const roi = t.roi ?? 0
                   return (
                     <tr key={t.id} style={{ background: rowBg }}>
                       <td style={{ ...cellL, padding: '10px 4px 10px 0' }}>
@@ -146,11 +195,20 @@ export default function RankingsPage() {
                           </div>
                         </div>
                       </td>
+                      <td style={{ ...cell, color: '#374151', fontWeight: 600 }}>{t.slips_posted ?? 0}</td>
                       <td style={{ ...cell, color: '#15803d', fontWeight: 700 }}>{t.wins_last_10}</td>
-                      <td style={{ ...cell, color: '#d97706', fontWeight: 700 }}>{(t.avg_odds || 0).toFixed(2)}</td>
+                      <td className="rk-optional" style={{ ...cell, color: '#b91c1c', fontWeight: 700 }}>{t.losses ?? 0}</td>
                       <td style={{ ...cell }}>
                         <span style={{ fontWeight: 700, color: winPctColor(winPct) }}>{Math.round(winPct * 100)}%</span>
                       </td>
+                      <td style={{ ...cell, color: '#d97706', fontWeight: 700 }}>{(t.avg_odds || 0).toFixed(2)}</td>
+                      <td style={{ ...cell, fontWeight: 700, color: roi >= 0 ? '#15803d' : '#b91c1c' }}>
+                        {roi >= 0 ? '+' : ''}{roi}%
+                      </td>
+                      <td className="rk-optional" style={{ ...cell }}>
+                        <span style={{ fontWeight: 800, color: streak.color }}>{streak.text}</span>
+                      </td>
+                      <td style={{ ...cell }}><ResultDots last5={t.last5 ?? ''} /></td>
                       {showExtra && <td style={{ ...cell }}><span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{score.toFixed(2)}</span></td>}
                     </tr>
                   )
