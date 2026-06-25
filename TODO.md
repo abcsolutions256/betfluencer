@@ -2,6 +2,14 @@
 
 System overview: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Detail + file:line: [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md). ioTec flow: [`docs/PAYMENTS-IOTEC.md`](docs/PAYMENTS-IOTEC.md).
 
+## 🔴 Current open items (2026-06-25)
+- [ ] **P0 — Tipster login broken for legacy tipsters.** Existing `tipsters` rows have `profile_id = NULL` + old `password_hash`, never migrated to Supabase Auth → `getMyTipster()` returns null → `/api/tipster/me` 401 "Not a tipster" → dashboard bounces to login (redirect loop). Fix: (a) **link-on-signup** — `/api/tipster/register` adopts an existing tipster matched by email/phone (set `profile_id`) instead of creating a duplicate; (b) **backfill** existing rows (create/link a Supabase auth user per tipster; old passwords can't carry over → reset). New signups already work.
+- [x] **`/tipster` index routes via the real session** (2026-06-25) — was using the dead `bf_tipster` localStorage flag (always → signup); now server-redirects to dashboard (linked tipster) / login.
+- [ ] **Apply migrations 0006–0010 to the live DB** (0006 normalized verify, 0007 hidden flag, 0008/0009 buyer_key, 0010 skip-verified sync + `verify_attempts`). Until 0010 lands, `sync-codes` + `record_failed_verify` RPC error out (sync silently no-ops).
+- [ ] **Bet worker** confirmed working (22Bet `found=true` + Gemini normalize; runs from local/residential IP — cloud IP blocked, so prod `SYNC_CODES_ENABLED=false`, run the worker locally). Optional: shorten the 1xBet `navigatesOnSubmit` timeout (~53s) for snappier invalid-code failures.
+- [x] **Playwright e2e merge gate** (2026-06-25) — `npm run test:e2e`, 7 specs green (local Supabase + ioTec demo). Caught + fixed a real stale-feed cache bug (`supabaseServer()` now `cache:'no-store'` + `/api/slips` `Cache-Control: no-store`). Gap: no spec covers the legacy-tipster login case — add once the P0 fix lands.
+- [x] **Redis-queue rearchitecture reverted** — built (cloud app+redis+sync, local worker consuming a stream, `/api/slips/verify-callback`) then reverted as too complex. Current model = direct worker call. Don't reintroduce without re-asking.
+
 ## 🔭 OVERHAUL (in progress, 2026-06-12)
 Decisions: **Supabase Auth** (email+password) · pre-pay **proof only** (no picks) · commission **global default + per-tipster override** · payout **instant per sale**. Paywall = the booking code lives in a separate service-role-only `betslip_codes` table (never a column on `betslips`); only the authenticated, purchase-checked API returns it.
 

@@ -9,7 +9,7 @@ Business model: **pay-per-slip**, not subscriptions. Platform takes **10%** comm
 
 ## Stack
 - **Next.js 14.2.3** App Router + **React 18** + **TypeScript** + **Tailwind** (inline styles + CSS vars in `globals.css`).
-- **Supabase = Postgres only** (accessed via `@supabase/supabase-js` service-role key). **Not** using Supabase Auth.
+- **Supabase** — Postgres + **Supabase Auth** (email+password via `@supabase/ssr`) for **tipsters + admins**. Server work uses the service-role client `supabaseServer()` (`src/lib/supabase.ts`, now pins `cache:'no-store'`); per-user session client = `supabaseSession()` (`src/lib/supabase/server.ts`, reads cookies, RLS as the user); `src/middleware.ts` refreshes the session each request. **Buyers do NOT log in** — anonymous localStorage guest key (`src/lib/guestId.ts` → `x-buyer-key`).
 - **ioTec Pay** — Mobile Money (MTN + Airtel UG), collections + disbursements. Lib: `src/lib/payments.ts`.
 - **Anthropic SDK** — betslip screenshot parsing (`@anthropic-ai/sdk`, `api/parse-slip`).
 - **api-football** — auto-verify match results (`src/lib/footballApi.ts`, `api/verify` cron).
@@ -22,17 +22,17 @@ npm run dev      # local dev → http://localhost:3000
 npm run build    # production build
 npm run start    # serve build
 npm run lint     # eslint (next lint)
+npm run test:e2e # Playwright e2e MERGE GATE — boots local Supabase + ioTec demo, 7 specs (scripts/e2e.sh)
 ```
-No test setup yet.
+Tests: Playwright e2e in `tests/e2e/` (see `tests/e2e/README.md`). Prereq once: `npx playwright install chromium`. Covers home, tipster signup/login, manual-slip→verified+proof-only feed, coded-slip→pending+secret hidden, guest purchase (demo)→reveal entitlement, admin hide, rankings.
 
 ## Database
-No Supabase CLI / `supabase/` migrations dir. Schema is two raw SQL files run by hand in the Supabase SQL editor:
-- `src/lib/schema.sql` — tables, indexes, auto-tick trigger, `tipster_rankings` view, seed data.
-- `src/lib/rls.sql` — RLS policies (currently all `using(true)` — effectively open; the API is the real gate via the service-role key).
+Supabase CLI migrations: `supabase/config.toml` + `supabase/migrations/`. Apply with `npm run db:push` (or `supabase db reset` locally). Tables also mirrored in `src/lib/schema.sql` / `rls.sql` for reference.
+**Migrations 0001–0010. Apply 0002,0003,0004,0005,0006,0007,0008,0009,0010 to the LIVE DB** (0005 = auth/paywall overhaul; 0010 = skip-verified sync + `verify_attempts`).
 
-**Tables defined:** `tipsters`, `betslips`, `betslip_legs`, `slip_purchases`, `payments`, `earnings`, `platform_settings`. View: `tipster_rankings`. `schema.sql` matches the live DB as of 2026-06-10 (incl. `betslips.betting_site` / `booking_code`).
+**Tables:** `profiles`(role: user|tipster|admin), `tipsters`, `betslips`(+`verification_status`,`hidden`,`verify_attempts`,proof cols), `betslip_legs`, **`betslip_secrets`**(code/site/screenshot — service-role only), `slip_purchases`(`buyer_key` for guests), `slip_verifications`(+`normalized`/`summary`/`total_odds`), `transactions`(ioTec ledger), `payments`(legacy), `earnings`, `platform_settings`. View: `tipster_rankings`.
 
-Note: the dead `subscriptions` / `tips` queries were removed (per-slip model); `tipster_stats` was a wrong name for the `tipster_rankings` view — now fixed.
+Note: `betslips`/`betslip_legs`/`slip_purchases` have **NO `created_at`** — don't select/order by it (silent empty feed).
 
 ## Layout
 - `src/app/page.tsx` channels home · `rankings` · `mine` (phone lookup) · `channel/[slug]` (tipster profile, read-only) · `channels` · `advertise` · `about` · `admin`.
@@ -64,13 +64,19 @@ Separate Dockerized service in [`bet-code-worker/`](bet-code-worker/) — Vercel
 
 **Full stack:** root [`docker-compose.yml`](docker-compose.yml) runs `web` + `bet-code-worker` + `sync`. The web image is a Next **standalone** build (`output:'standalone'`, [`Dockerfile`](Dockerfile)); `NEXT_PUBLIC_*` are build args, server secrets are runtime env. `docker compose up --build`.
 
-## Known landmines (still open — read before touching auth)
-Full detail in [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md). The old buy-flow bugs (disburse-to-buyer, mock data, no UI, unsigned webhook) were fixed in the ioTec rebuild above. Remaining:
-1. **Admin token is forgeable** — `base64("admin:…")` passes `isValidAdminToken`; default password hardcoded in `adminAuth.ts`. (P0)
-2. **Password scheme mismatch** — `auth.ts` uses salted SHA-256; seed rows use pgcrypto bcrypt. Pick one.
-3. **Hardcoded Supabase project URL** in `supabaseServer()` — ignores `NEXT_PUBLIC_SUPABASE_URL`.
-4. **RLS hardened 2026-06-10** (migration `0003` + `rls.sql`): anon can read only finished slips + their legs; pending booking codes, purchases, payments, earnings, transactions, and `tipsters` (password_hash) are service-role-only, and anon can't forge a purchase. **Apply `0003` to the live DB** — until then the public anon key can read pending codes directly. Never reintroduce `using(true)` policies.
-5. **Unlock check — done 2026-06-10:** the slip-list APIs (`/api/slips`, `/api/tipster/[slug]/slips`) strip `booking_code`/`betting_site`/`slip_image_url`/`note` from **pending** slips unless the caller's `?buyer=` (phone/email) has an `active` `slip_purchases` row (`src/lib/entitlement.ts`). The tipster dashboard shows its own pending codes as "hidden until sold" — a tipster can't yet be securely told apart from a buyer (needs real tipster sessions). Still open: tipster owner-view.
+## Current state (2026-06-25)
+- **Auth/paywall overhaul shipped** (migration `0005`): tipsters/admins on Supabase Auth; admin = `requireRole('admin')` (forgeable `base64("admin:")` token GONE); paywall via service-role-only `betslip_secrets` + gated `GET /api/slips/[id]/reveal`; marketplace shows **proof only**. Buyers anonymous (guest `buyer_key`).
+- **Verification:** the app calls the worker **directly** (`/api/tips`, `sync-codes`, `verify-code` → `verifyAndRecord` → `callWorker` → `BET_CODE_WORKER_URL`). A Redis-queue rearchitecture was built then **reverted** — do NOT reintroduce Redis without the user re-asking.
+- **Bet worker confirmed working** (2026-06-25): live `/verify` 22Bet → `found=true` + Gemini normalize; 1xBet machinery works (slow ~53s on invalid codes — `navigatesOnSubmit` timeout). Runs from a **local/residential IP**; cloud/datacenter IPs are blocked → prod sets `SYNC_CODES_ENABLED=false`.
+- **e2e suite is green** (`npm run test:e2e`) and is the merge gate.
+
+## Known landmines (read before touching auth)
+Full detail in [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md).
+1. **🔴 Tipster login broken for legacy tipsters (P0).** Existing `tipsters` rows have **`profile_id = NULL`** + an old `password_hash` — never migrated to Supabase Auth. `getMyTipster()` matches `tipsters.profile_id == auth.uid`, so they get `/api/tipster/me` 401 "Not a tipster" → dashboard bounces to login (redirect loop). New signups via `/api/tipster/register` set `profile_id` and work. **Fix not yet built:** link-on-signup (adopt an existing tipster by email/phone) + a backfill for existing rows. (`/tipster` index page was fixed to route via the real session, not the dead `bf_tipster` localStorage flag.)
+2. **Stale-feed cache trap (FIXED, keep):** Next.js persists supabase-js GET responses to `.next/cache`, so reads returned stale/empty feeds despite `dynamic='force-dynamic'`. `supabaseServer()` now uses `cache:'no-store'`; `/api/slips` also sends `Cache-Control: no-store`. Don't remove.
+3. **Hardcoded Supabase URL — FIXED:** `supabaseServer()` reads `NEXT_PUBLIC_SUPABASE_URL` from env.
+4. **RLS hardened** (migrations `0003`/`0005`): anon reads only verified/finished slips; pending codes, purchases, financials, `betslip_secrets`, `tipsters` are service-role-only. Never reintroduce `using(true)`.
+5. **Buyer identity is an unauthenticated guest key** (`x-buyer-key` / `?buyer=`). Anyone with a buyer's key could fetch their unlocked content. Acceptable for the no-login guest model; full strength = buyer OTP.
 6. Legacy `payments` table + `flw_ref` column are superseded by `transactions` — leave or drop later.
 
 ## Don't
