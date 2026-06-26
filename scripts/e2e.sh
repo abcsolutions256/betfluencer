@@ -97,9 +97,17 @@ unset BET_CODE_WORKER_URL || true
 export NEXT_PUBLIC_APP_URL="$BASE_URL"
 export E2E_BASE_URL="$BASE_URL"
 export PORT="$PORT"
-# Admin seeded by global-setup; specs read these.
-export E2E_ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-admin@e2e.test}"
+
+# Auth is phone-identity signed cookies. SESSION_SECRET falls back to the
+# service-role key if unset, but pin it for determinism across app+specs.
+export SESSION_SECRET="${SESSION_SECRET:-e2e-session-secret}"
+
+# Admin = a designated phone + password (no DB seeding). The app reads
+# ADMIN_PHONES/ADMIN_PASSWORD; specs read the E2E_ADMIN_* mirrors.
+export E2E_ADMIN_PHONE="${E2E_ADMIN_PHONE:-+256700000000}"
 export E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-e2eAdmin123!}"
+export ADMIN_PHONES="$E2E_ADMIN_PHONE"
+export ADMIN_PASSWORD="$E2E_ADMIN_PASSWORD"
 
 # ── 4. Start the app ──────────────────────────────────────────────────────
 : > "$APP_LOG"

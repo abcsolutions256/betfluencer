@@ -1,34 +1,30 @@
 // Reusable UI flows shared across specs.
 import { expect, type Page } from '@playwright/test'
-import { uniqueEmail, uniqueUsername, TEST_PASSWORD } from './helpers'
+import { uniqueUsername, TEST_PASSWORD } from './helpers'
 
 export interface TipsterCreds {
   name: string
-  email: string
   password: string
   username: string
   phone: string
 }
 
-// Drive the real tipster signup UI end-to-end. Local Supabase has email
-// confirmation disabled (config.toml: enable_confirmations = false), so
-// signUp returns a session immediately and the page registers the tipster
-// and lands on the dashboard. Returns the creds for later login.
+// Drive the real tipster signup UI end-to-end (phone + password, no email).
+// /api/tipster/auth sets the signed-cookie session and the page lands on the
+// dashboard. Returns the creds for later login.
 export async function signUpTipster(page: Page): Promise<TipsterCreds> {
   const creds: TipsterCreds = {
     name: 'E2E Tipster',
-    email: uniqueEmail('tipster'),
-    password: TEST_PASSWORD,
+    password: TEST_PASSWORD,                 // 'e2ePass123!' — passes isStrongPassword
     username: uniqueUsername('enzo'),
-    phone: '771' + Math.floor(100000 + Math.random() * 899999).toString(),
+    phone: '7' + String(Date.now()).slice(-8),  // unique +2567XXXXXXXX
   }
 
   await page.goto('/tipster/signup')
   await page.getByPlaceholder('Display name').fill(creds.name)
-  await page.getByPlaceholder('Email').fill(creds.email)
-  await page.getByPlaceholder('Password (min 6)').fill(creds.password)
   await page.getByPlaceholder('Username (public, e.g. enzo)').fill(creds.username)
-  await page.getByPlaceholder('Payout Mobile Money number').fill(creds.phone)
+  await page.getByPlaceholder('Mobile Money number (your login + payout)').fill(creds.phone)
+  await page.getByPlaceholder('Password (min 8, incl. a number)').fill(creds.password)
   await page.getByPlaceholder('Sport / leagues you cover').fill('Premier League')
 
   await page.getByRole('button', { name: 'Create tipster account' }).click()
@@ -39,24 +35,23 @@ export async function signUpTipster(page: Page): Promise<TipsterCreds> {
   return creds
 }
 
-// Log in via the tipster login UI; lands on the dashboard.
+// Log in via the tipster login UI (phone + password); lands on the dashboard.
 export async function loginTipster(page: Page, creds: TipsterCreds) {
   await page.goto('/tipster/login')
-  await page.getByPlaceholder('Email').fill(creds.email)
+  await page.getByPlaceholder('Mobile Money number').fill(creds.phone)
   await page.getByPlaceholder('Password').fill(creds.password)
   await page.getByRole('button', { name: 'Log in' }).click()
   await expect(page).toHaveURL(/\/tipster\/dashboard/, { timeout: 30_000 })
 }
 
-// Log in a general Supabase-auth user via /login (used for the admin, whose
-// role was promoted in global-setup). Lands on '/'.
-export async function loginUser(page: Page, email: string, password: string) {
-  await page.goto('/login')
-  await page.getByPlaceholder('Email').fill(email)
+// Log in the admin via the /admin gate (phone + password → admin session).
+export async function loginAdmin(page: Page, phone: string, password: string) {
+  await page.goto('/admin')
+  await page.getByPlaceholder('Admin phone (+256…)').fill(phone)
   await page.getByPlaceholder('Password').fill(password)
   await page.getByRole('button', { name: 'Log in' }).click()
-  // /login pushes to '/'; wait for the marketplace to confirm the session.
-  await expect(page).toHaveURL(/\/$/, { timeout: 30_000 })
+  // The admin panel header appears once the session is accepted.
+  await expect(page.getByText('Betfluencer HQ')).toBeVisible({ timeout: 30_000 })
 }
 
 // Post a manual slip from the dashboard Post tab. Returns nothing; the caller

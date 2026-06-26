@@ -45,3 +45,7 @@ Thumbs.db
 /playwright/.cache/
 .e2e-app.log
 **.branches
+# Prod DB backups/dumps — contain REAL production data (phones, hashes). Never commit.
+merge/backup/
+**.e2e**
+**.log

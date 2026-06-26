@@ -107,3 +107,138 @@ unauthenticated diagnostic routes that leak pending-slip internals (main-bugs #8
   if the linked DB recorded that version.
 - **Pick-string fidelity** — `pickForLeg` covers the common markets; refine the
   mapping against real Gemini `normalized` output during verification.
+
+---
+
+## E. Prod migration apply — EXECUTED 2026-06-25 (direct-to-prod, `sooutpsbdgqelnnnfezp`)
+
+Owner supplied main-DB creds (`.env`: `DATABASE_URL`, `SUPABASE_DB_PASSWORD`,
+`SUPABASE_SERVICE_ROLE_KEY`; CLI linked to `sooutpsbdgqelnnnfezp`). Applied
+`20260626000000`–`05` via `supabase db push`. Direct DB host is IPv6-only / unresolved
+here → all CLI ops used the **session pooler** (`aws-1-ap-south-1.pooler.supabase.com:5432`,
+password URL-encoded).
+
+**Pre-flight.**
+- Backups (git-ignored, in `merge/backup/`): `prod_schema_*`, `prod_data_*` (real data:
+  29 tipsters, 536 betslips, 25 purchases, + storage), `prod_auth_schema_*`
+  (confirmed `auth.users` exists → `profiles` FK resolves).
+- Remote migration history was **empty** (main was hand-applied, never used the toolchain)
+  → `supabase migration repair --status applied` marked dev `20260610*`–`20260625*` (11
+  versions incl. the 0-byte `_test`) so `db push` applied **only** the 6 merge migrations.
+
+**Two fixes made before push (driven by the authoritative prod dump, not `schema.sql`):**
+1. **`000001` §11 — drop leftover permissive policy.** The live `tipsters` table carried a
+   dashboard-created `"service role full access"` policy (`USING(true)`, no `TO` → PUBLIC,
+   incl. anon) that the migration's name-list did **not** drop → anon could still read
+   `tipsters` (password_hash + phones) after "hardening". Added
+   `drop policy if exists "service role full access" on tipsters;`. Post-apply: **zero**
+   policies remain on `tipsters` (service-role-only). Not in `main:schema.sql` (drift) —
+   only the live dump revealed it.
+2. **`000001` top — `set search_path = public, extensions;`.** uuid-ossp lives in the
+   `extensions` schema on prod; the migration's `uuid_generate_v4()` defaults are
+   unqualified. Pinned the path so the new-table defaults resolve under `db push` (which
+   may not inherit the SQL-Editor path main was built with).
+
+   > Note: `posting_mode` did **NOT** need widening — the live `betslips_posting_mode_check`
+   > already includes `booking_code` (prod had drifted ahead of `main:schema.sql`).
+
+**Apply result (exit 0, all NOTICEs benign):** `platform_settings` already exists → skipped;
+`betslip_legs.fixture_id` already exists → skipped (`000004` no-op); `000005` ran as the
+guarded no-op (backfill placeholders unfilled).
+
+**Post-apply live verification (REST, service role + fresh schema dump
+`prod_schema_POSTAPPLY.sql`):**
+- New tables present: `profiles`, `transactions`, `slip_verifications`, `betslip_secrets`
+  (all 7 pre-existing tables + data preserved).
+- `betslip_secrets` = **56** (1 booking_code + 55 slip_image_url) = exactly the betslips
+  that held secrets; betslips secret cols now **0** non-empty → COPY-THEN-NULL lossless.
+- `verification_status`: 56 verified (= all 56 screenshot slips, via §7 guarded update) /
+  480 pending (= all booking_code slips, await worker) / 0 failed.
+- `result` CHECK now allows `void` on betslips + betslip_legs.
+- `platform_settings`: prod's pre-existing `public_signups_enabled` **not** clobbered
+  (seed was `on conflict (key) do nothing`); `platform_commission` added.
+- Idempotency audit: every `create table`/`add column`/`create index` is `if not exists`;
+  every seed `insert` is `on conflict do nothing`; constraints are drop-if-exists→widen
+  (never narrow); data UPDATEs are guarded (`verification_status='pending'` / column-guards).
+
+**Still NOT done (needs owner inputs / further steps):**
+- `000005` backfill — all 29 tipsters have `profile_id = NULL` (P0 login dead-end persists
+  until per-tipster Auth users created + UIDs filled). Admin promotion likewise pending UID.
+- Runtime validation (`next build`, `npm run test:e2e`, live both-inputs→both-verifiers).
+- `getMyTipster()` `.maybeSingle()` hardening.
+
+---
+
+## F. Made the WHOLE migration set replay-safe (idempotent) — 2026-06-25
+
+Owner hit `ERROR: relation "tipsters" already exists` running `supabase db push` against a
+DB that has the base tables but an **empty** migration history (so push tried to replay the
+dev migrations, which used bare `create table`). Fix: made every dev migration idempotent so
+a replay skips existing objects / upserts data (no `migration repair` needed anymore).
+
+Edits (the `0626*` merge set was already idempotent):
+- **`0001_init`** — all 7 `create table` → `if not exists`; 5 indexes → `if not exists`;
+  `tipster_tick_trigger` → `drop trigger if exists` first; `tipster_rankings` view →
+  existence-guarded do-block (won't error if a drifted view already exists); seed
+  `insert into tipsters` → `on conflict do nothing`.
+- **`0002_transactions`** — `create table` → `if not exists`; 4 indexes → `if not exists`;
+  `transactions_set_updated_at` trigger + `transactions_service_only` policy → drop-first.
+- **`0003_lock_pending_content`** — added the missing `drop policy if exists
+  "legs_finished_public"` before its create.
+- **`0004_slip_verifications`** — `create table` + 2 indexes → `if not exists`.
+
+Static sweep: 0 bare `create table`/`create index`/`add column`; every policy create has a
+matching drop-if-exists; every trigger create has a preceding drop; every seed insert is
+`on conflict`.
+
+**Proven** with `merge/backup/test_idempotency.sh` (throwaway `supabase/postgres`,
+applies the full set TWICE): PASS 1 (fresh) CLEAN + **PASS 2 (replay onto a populated DB)
+CLEAN** — reproduces and clears the owner's error. (Script lives under the git-ignored
+`merge/backup/`.)
+
+---
+
+## G. Auth reverted to PHONE identity + screenshots-on-purchase — 2026-06-26
+
+Owner decision (supersedes the merge's "Supabase Auth is the only auth"): **revert logins
+to phone numbers, scrap email.** Phone is the identity for tipsters, admins, and buyers.
+Buyers stay no-login. A buyer who purchases must see the slip **screenshot + match details**.
+**Code-only — no DB migration; no Supabase Auth objects dropped** (profiles / auth trigger /
+RLS left dormant). Plan: `~/.claude/plans/iterative-frolicking-matsumoto.md`.
+
+Why it's clean: the 29 prod tipsters' `password_hash` is the sha256 `salt:hash` that
+`src/lib/auth.ts#verifyPassword` already validates → they log in with existing passwords (P0
+login dead-end resolved, no email backfill — `20260626000005` abandoned). The 25 prod
+purchases are already keyed by `user_phone`.
+
+What changed:
+- **Session core** — new `src/lib/auth/cookie.ts` (HMAC-signed httpOnly `bf_session`
+  `{sub,role,exp}`; key = `SESSION_SECRET` ?? service-role key). `src/lib/auth/session.ts`
+  rewritten to back `getSessionUser/getMyTipster/requireRole` + `createSession/clearSession`
+  with the cookie. `src/middleware.ts` reduced to a no-op (no Supabase refresh).
+- **Tipster** — `POST /api/tipster/auth` (login/signup, phone+password → cookie); removed
+  `/api/tipster/register`; login/signup pages rewritten phone-only.
+- **Admin** — `POST /api/admin/login` (phone ∈ `ADMIN_PHONES` + `ADMIN_PASSWORD` → admin
+  cookie, server-validated, not forgeable). Inline login gate on `src/app/admin/page.tsx`.
+  All `/api/admin/*` keep `requireRole('admin')`.
+- **Buyer = phone** — `src/lib/buyer.ts` (`buyerIdentity`/`buyerFromRequest`); entitlement
+  keyed on `slip_purchases.user_phone` in `payments/initiate`, `slips/[id]/reveal`,
+  `subscribe`. `src/lib/guestId.ts` → `bf_buyer_phone` + `x-buyer-phone`. Mine page = phone
+  lookup. Owner check = `session.sub === tipster.id`.
+- **Screenshots** — upload moved server-side (`POST /api/tipster/upload`, service role) so it
+  doesn't need a Supabase session; stored in `betslip_secrets.slip_image_url` by `/api/tips`;
+  `SlipReveal` now shows the image **+ parsed match-detail legs**; dashboard requires the file
+  and aborts on upload failure (no more silent imageless "screenshot" slips). Live audit: of
+  71 screenshot slips, 56 have images; the 15 without are all finished/free (not sellable).
+- **Email/Supabase scrapped** — deleted `/login` + `/signup` pages, removed the TopBar
+  account button; `auth/logout` clears the cookie; anon/session supabase clients now unused
+  (files left in place). Card `user_email` kept (an ioTec card detail, not a login).
+- **Env** — add `ADMIN_PHONES` (comma list); `SESSION_SECRET` optional. Documented in
+  `.env.local.example`. **CLAUDE.md updated.**
+- **e2e** — fixtures/specs/`scripts/e2e.sh`/`global-setup` switched to phone auth
+  (tipster phone signup/login, admin phone login, buyer reveal by `x-buyer-phone`).
+
+Verification: **`npm run build` green (twice)**. The `npm run test:e2e` merge gate could not
+complete in this environment — `supabase start` failed on flaky-network truncated image pulls
++ an unhealthy Logflare analytics container (Playwright never ran). Re-run on a stable network
+(or with analytics excluded) to close the gate.

@@ -9,7 +9,8 @@ Business model: **pay-per-slip**, not subscriptions. Platform takes **10%** comm
 
 ## Stack
 - **Next.js 14.2.3** App Router + **React 18** + **TypeScript** + **Tailwind** (inline styles + CSS vars in `globals.css`).
-- **Supabase** — Postgres + **Supabase Auth** (email+password via `@supabase/ssr`) for **tipsters + admins**. Server work uses the service-role client `supabaseServer()` (`src/lib/supabase.ts`, now pins `cache:'no-store'`); per-user session client = `supabaseSession()` (`src/lib/supabase/server.ts`, reads cookies, RLS as the user); `src/middleware.ts` refreshes the session each request. **Buyers do NOT log in** — anonymous localStorage guest key (`src/lib/guestId.ts` → `x-buyer-key`).
+- **Supabase** — Postgres (data baseline = main's prod). Server work uses the service-role client `supabaseServer()` (`src/lib/supabase.ts`, pins `cache:'no-store'`). **Supabase Auth is NOT used** (reverted 2026-06-26): the `profiles` table + auth trigger/RLS remain in the DB but dormant. The anon/session clients (`src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`) are unused.
+- **Auth = phone identity, signed-cookie sessions** (no email). Tipsters + admins log in with **phone + password** (sha256 `salt:hash`, `src/lib/auth.ts`) → `POST /api/tipster/auth` / `POST /api/admin/login` set an HMAC-signed httpOnly cookie (`src/lib/auth/cookie.ts`; `getMyTipster`/`requireRole` in `src/lib/auth/session.ts`). Admin = phone ∈ `ADMIN_PHONES` + `ADMIN_PASSWORD`. **Buyers do NOT log in** — identified by the **phone they pay with** (`slip_purchases.user_phone`; client `src/lib/guestId.ts` → `x-buyer-phone`; server `src/lib/buyer.ts`). Sign key = `SESSION_SECRET` (falls back to the service-role key).
 - **ioTec Pay** — Mobile Money (MTN + Airtel UG), collections + disbursements. Lib: `src/lib/payments.ts`.
 - **Anthropic SDK** — betslip screenshot parsing (`@anthropic-ai/sdk`, `api/parse-slip`).
 - **api-football** — auto-verify match results (`src/lib/footballApi.ts`, `api/verify` cron).
@@ -65,18 +66,18 @@ Separate Dockerized service in [`bet-code-worker/`](bet-code-worker/) — Vercel
 **Full stack:** root [`docker-compose.yml`](docker-compose.yml) runs `web` + `bet-code-worker` + `sync`. The web image is a Next **standalone** build (`output:'standalone'`, [`Dockerfile`](Dockerfile)); `NEXT_PUBLIC_*` are build args, server secrets are runtime env. `docker compose up --build`.
 
 ## Current state (2026-06-25)
-- **Auth/paywall overhaul shipped** (migration `0005`): tipsters/admins on Supabase Auth; admin = `requireRole('admin')` (forgeable `base64("admin:")` token GONE); paywall via service-role-only `betslip_secrets` + gated `GET /api/slips/[id]/reveal`; marketplace shows **proof only**. Buyers anonymous (guest `buyer_key`).
+- **Auth reverted to phone identity (2026-06-26):** Supabase Auth replaced by phone+password signed-cookie sessions (see Stack). Admin = `requireRole('admin')` backed by the cookie (forgeable `base64("admin:")` token still GONE). Paywall unchanged: service-role-only `betslip_secrets` + gated `GET /api/slips/[id]/reveal`; marketplace shows **proof only**. Buyers identified by the phone they pay with (`slip_purchases.user_phone`); the screenshot/code/picks reveal to a buyer with an active purchase for that phone.
 - **Verification:** the app calls the worker **directly** (`/api/tips`, `sync-codes`, `verify-code` → `verifyAndRecord` → `callWorker` → `BET_CODE_WORKER_URL`). A Redis-queue rearchitecture was built then **reverted** — do NOT reintroduce Redis without the user re-asking.
 - **Bet worker confirmed working** (2026-06-25): live `/verify` 22Bet → `found=true` + Gemini normalize; 1xBet machinery works (slow ~53s on invalid codes — `navigatesOnSubmit` timeout). Runs from a **local/residential IP**; cloud/datacenter IPs are blocked → prod sets `SYNC_CODES_ENABLED=false`.
 - **e2e suite is green** (`npm run test:e2e`) and is the merge gate.
 
 ## Known landmines (read before touching auth)
 Full detail in [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md).
-1. **🔴 Tipster login broken for legacy tipsters (P0).** Existing `tipsters` rows have **`profile_id = NULL`** + an old `password_hash` — never migrated to Supabase Auth. `getMyTipster()` matches `tipsters.profile_id == auth.uid`, so they get `/api/tipster/me` 401 "Not a tipster" → dashboard bounces to login (redirect loop). New signups via `/api/tipster/register` set `profile_id` and work. **Fix not yet built:** link-on-signup (adopt an existing tipster by email/phone) + a backfill for existing rows. (`/tipster` index page was fixed to route via the real session, not the dead `bf_tipster` localStorage flag.)
+1. **✅ Legacy tipster login (was P0) — RESOLVED by the phone-auth revert (2026-06-26).** `getMyTipster()` now resolves the tipster by the session cookie's `sub` (= the tipster id), and login is phone + the existing `password_hash`. All 29 prod tipsters log in with their current credentials — no `profile_id`/email backfill needed (the email-backfill migration `20260626000005` is abandoned).
 2. **Stale-feed cache trap (FIXED, keep):** Next.js persists supabase-js GET responses to `.next/cache`, so reads returned stale/empty feeds despite `dynamic='force-dynamic'`. `supabaseServer()` now uses `cache:'no-store'`; `/api/slips` also sends `Cache-Control: no-store`. Don't remove.
 3. **Hardcoded Supabase URL — FIXED:** `supabaseServer()` reads `NEXT_PUBLIC_SUPABASE_URL` from env.
 4. **RLS hardened** (migrations `0003`/`0005`): anon reads only verified/finished slips; pending codes, purchases, financials, `betslip_secrets`, `tipsters` are service-role-only. Never reintroduce `using(true)`.
-5. **Buyer identity is an unauthenticated guest key** (`x-buyer-key` / `?buyer=`). Anyone with a buyer's key could fetch their unlocked content. Acceptable for the no-login guest model; full strength = buyer OTP.
+5. **Buyer identity is an unverified phone** (`x-buyer-phone` / `?buyer=`, matched to `slip_purchases.user_phone`). Anyone who knows a buyer's number could fetch their unlocked content. Acceptable for the no-login model (same risk profile as the old guest key); full strength = buyer OTP.
 6. Legacy `payments` table + `flw_ref` column are superseded by `transactions` — leave or drop later.
 
 ## Don't

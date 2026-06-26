@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation'
 import { Loader2, Plus, Send, Wallet, BarChart2, User, Home, Trash2 } from 'lucide-react'
 import { ResultPill } from '@/components/ui'
 import { ImageUpload } from '@/components/ui/ImageUpload'
-import { supabaseBrowser } from '@/lib/supabase/client'
 import type { Tipster } from '@/types'
 import type { SlipLeg } from '@/types/betslip'
 import { BETTING_SITES } from '@/lib/bettingSites'
@@ -118,17 +117,16 @@ export default function TipsterDashboard() {
     }
   }
 
-  async function uploadSlipImage(file: File, tipsterId: string): Promise<string | null> {
+  async function uploadSlipImage(file: File, _tipsterId: string): Promise<string | null> {
     try {
-      const db = supabaseBrowser()
-      const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `${tipsterId}/${Date.now()}.${ext}`
-      const { error } = await db.storage
-        .from('betslips')
-        .upload(path, file, { contentType: file.type, upsert: false })
-      if (error) { console.error('Image upload error:', error); return null }
-      const { data } = db.storage.from('betslips').getPublicUrl(path)
-      return data.publicUrl
+      // Server-side upload (service role) so it doesn't depend on a Supabase
+      // Auth session — auth is now phone-identity cookies.
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/tipster/upload', { method: 'POST', body: fd })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { console.error('Image upload error:', d?.error); return null }
+      return d.url ?? null
     } catch (e) {
       console.error('uploadSlipImage error:', e)
       return null
@@ -144,7 +142,7 @@ export default function TipsterDashboard() {
   function removeSlip(si: number) { setSlips(s => s.filter((_, i) => i !== si)) }
 
   useEffect(() => {
-    // Resolve the logged-in tipster from the Supabase session.
+    // Resolve the logged-in tipster from the session cookie.
     fetch('/api/tipster/me').then(r => r.ok ? r.json() : null).then(d => {
       if (!d?.tipster) { router.push('/tipster/login'); return }
       const id = d.tipster.id
@@ -164,9 +162,19 @@ export default function TipsterDashboard() {
 
     if (postMode === 'screenshot') {
       for (const ss of screenshotSlips) {
-        let slip_image_url: string | null = null
-        if (ss.slipFile) {
-          slip_image_url = await uploadSlipImage(ss.slipFile, tipster.id)
+        // A screenshot slip MUST carry its image — that's the product the buyer
+        // unlocks. Require the file and fail loudly if the upload doesn't return
+        // a URL, rather than silently posting an imageless slip.
+        if (!ss.slipFile) {
+          setPostError('Please attach a screenshot for each slip before posting.')
+          setPosting(false)
+          return
+        }
+        const slip_image_url = await uploadSlipImage(ss.slipFile, tipster.id)
+        if (!slip_image_url) {
+          setPostError('Screenshot upload failed. Please check your connection and try again.')
+          setPosting(false)
+          return
         }
         slipsToPost.push({
           posting_mode:  'screenshot',

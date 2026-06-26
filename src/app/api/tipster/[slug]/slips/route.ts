@@ -41,9 +41,9 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
     )
   }
 
-  // Is the caller the owning tipster?
+  // Is the caller the owning tipster? (session.sub IS the tipster id)
   const user  = await getSessionUser()
-  const owner = !!user && tip.profile_id === user.id
+  const owner = !!user && user.role === 'tipster' && tip.id === user.id
 
   let q = db
     .from('betslips')

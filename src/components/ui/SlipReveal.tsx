@@ -48,6 +48,30 @@ export function SlipReveal({ betslipId }: { betslipId: string }) {
     </div>
   ) : null
 
+  // Manual / parsed legs (e.g. a screenshot slip whose picks were parsed) —
+  // shown when there are no Gemini-normalised picks.
+  const legs: any[] = Array.isArray(data.legs) ? data.legs : []
+  const legsBlock = legs.length > 0 ? (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, padding: '10px 14px 2px', borderTop: '1px solid var(--line)' }}>
+        Match details · {legs.length} {legs.length === 1 ? 'game' : 'games'}
+      </div>
+      {legs.map((l: any, i: number) => (
+        <div key={i} style={{ padding: '8px 14px', borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white)' }}>{l.match}</div>
+            <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 1 }}>{[l.pick, l.league].filter(Boolean).join(' · ')}</div>
+          </div>
+          {l.odds ? <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--gold)' }}>{Number(l.odds).toFixed(2)}</div> : null}
+        </div>
+      ))}
+    </div>
+  ) : null
+
+  // The match details to render alongside a code/screenshot: prefer the
+  // normalised picks, else the parsed/manual legs.
+  const details = picks ?? legsBlock
+
   // Booking-code slip → the code to load on the bookie + the match details.
   if (data.booking_code) return (
     <div>
@@ -59,33 +83,22 @@ export function SlipReveal({ betslipId }: { betslipId: string }) {
         </div>
         <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, marginTop: 10 }}>Open <strong style={{ color: 'var(--offwhite)' }}>{data.betting_site}</strong> → booking/share codes → enter this code to load the full slip.</div>
       </div>
-      {picks}
+      {details}
     </div>
   )
 
+  // Screenshot slip → the uploaded image + its parsed match details.
   if (data.slip_image_url) return (
     <div>
       <div style={{ borderTop: '1px solid var(--line)', padding: '12px 14px' }}>
         <img src={resolveImageUrl(data.slip_image_url)} alt="Betslip" style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(245,166,35,0.3)', display: 'block' }} />
       </div>
-      {picks}
+      {details}
     </div>
   )
 
-  // Slip with normalised match details but no code/image (or manual legs).
-  if (picks) return <div>{picks}</div>
-
-  if (data.legs?.length) return (
-    <>{data.legs.map((l: any, i: number) => (
-      <div key={i} style={{ padding: '9px 14px', borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white)' }}>{l.match}</div>
-          <div style={{ fontSize: 10, color: 'var(--muted)' }}>{l.pick} · {l.league}</div>
-        </div>
-        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gold)' }}>{Number(l.odds || 0).toFixed(2)}</div>
-      </div>
-    ))}</>
-  )
+  // No code/image — just the structured match details (manual / parsed legs).
+  if (details) return <div>{details}</div>
 
   return <div style={{ borderTop: '1px solid var(--line)', padding: 14, fontSize: 12, color: 'var(--muted)' }}>Slip unlocked — no detail available.</div>
 }

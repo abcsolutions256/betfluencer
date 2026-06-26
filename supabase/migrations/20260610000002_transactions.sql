@@ -5,7 +5,7 @@ alter table slip_purchases add  constraint slip_purchases_status_check
 alter table slip_purchases alter column status set default 'pending';
 
 -- ── TRANSACTIONS (ioTec Pay — tracks every collection/disbursement) ─
-create table transactions (
+create table if not exists transactions (
   id                 uuid primary key default uuid_generate_v4(),
   iotec_id           text unique,                       -- ioTec collection id (= status requestId)
   external_id        text unique not null,              -- our reconciliation ref
@@ -32,19 +32,21 @@ create table transactions (
   updated_at         timestamptz default now()
 );
 
-create index idx_transactions_external on transactions(external_id);
-create index idx_transactions_iotec    on transactions(iotec_id);
-create index idx_transactions_status   on transactions(status, created_at desc);
-create index idx_transactions_betslip  on transactions(betslip_id);
+create index if not exists idx_transactions_external on transactions(external_id);
+create index if not exists idx_transactions_iotec    on transactions(iotec_id);
+create index if not exists idx_transactions_status   on transactions(status, created_at desc);
+create index if not exists idx_transactions_betslip  on transactions(betslip_id);
 
 -- keep updated_at fresh
 create or replace function set_updated_at() returns trigger as $$
 begin new.updated_at = now(); return new; end;
 $$ language plpgsql;
 
+drop trigger if exists transactions_set_updated_at on transactions;
 create trigger transactions_set_updated_at
   before update on transactions
   for each row execute function set_updated_at();
 
 alter table transactions enable row level security;
+drop policy if exists "transactions_service_only" on transactions;
 create policy "transactions_service_only" on transactions for all using (true);

@@ -5,7 +5,7 @@
 -- the structured matches + the raw section text, so a slip's real
 -- contents can be verified against what the tipster claims.
 
-create table slip_verifications (
+create table if not exists slip_verifications (
   id           uuid primary key default uuid_generate_v4(),
   betslip_id   uuid references betslips(id) on delete cascade,   -- optional link
   betting_site text,
@@ -23,8 +23,8 @@ create table slip_verifications (
 
 -- One current verification row per betslip (upserted on betslip_id).
 -- Postgres allows multiple NULLs, so manual one-off checks still append.
-create unique index uniq_slip_verif_betslip on slip_verifications(betslip_id);
-create index idx_slip_verif_code on slip_verifications(booking_code);
+create unique index if not exists uniq_slip_verif_betslip on slip_verifications(betslip_id);
+create index if not exists idx_slip_verif_code on slip_verifications(booking_code);
 
 -- Service-role only (written by the API; never read by the anon key).
 alter table slip_verifications enable row level security;

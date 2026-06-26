@@ -41,6 +41,13 @@
 --                     so the secret data is never lost.
 -- ============================================================================
 
+-- Resolve unqualified extension functions (uuid_generate_v4) regardless of the
+-- apply session's role default. On main's prod, uuid-ossp/pgcrypto live in the
+-- `extensions` schema (confirmed by the prod dump). main's own tables were created
+-- via the SQL Editor (extensions on path); `supabase db push` may not include it,
+-- so pin it here. Harmless + idempotent. handle_new_user() carries its own SET.
+set search_path = public, extensions;
+
 
 -- ============================================================================
 -- SECTION 1 — platform_settings  (dev 0001; main lacks it)
@@ -342,6 +349,13 @@ alter table platform_settings enable row level security;
 drop policy if exists "tipsters_public_read"      on tipsters;
 drop policy if exists "tipsters_service_write"     on tipsters;
 drop policy if exists "tipsters_service_update"    on tipsters;
+-- prod-dump finding (merge/backup/prod_schema_*.sql): main's LIVE tipsters table
+-- also carries a dashboard-created `"service role full access"` policy with
+-- USING(true) and NO `TO` clause → it applies to PUBLIC (incl. the anon key), so
+-- without this drop anon could still read tipsters (password_hash + phones) after
+-- hardening. Not present in main:src/lib/schema.sql (schema drift); only the live
+-- dump revealed it. Drop it so tipsters is truly service-role-only.
+drop policy if exists "service role full access"   on tipsters;
 
 drop policy if exists "betslips_finished_public"   on betslips;
 drop policy if exists "betslips_pending_service"   on betslips;

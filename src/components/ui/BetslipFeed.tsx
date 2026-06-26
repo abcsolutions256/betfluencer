@@ -11,7 +11,7 @@ function Chip({ children }: { children: React.ReactNode }) {
   return <span style={{ background: 'var(--bg3)', color: 'var(--offwhite)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, border: '1px solid var(--line)' }}>{children}</span>
 }
 
-// ── INLINE BUY FLOW (ioTec via usePayment — guest identity by x-buyer-key) ──
+// ── INLINE BUY FLOW (ioTec via usePayment — buyer identity by x-buyer-phone) ──
 function InlineBuyGate({ slip, tipsterName, onUnlock }: { slip: Betslip; tipsterName?: string; onUnlock: () => void }) {
   const { pay, sheet } = usePayment()
   async function buy() {

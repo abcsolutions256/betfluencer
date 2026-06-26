@@ -1,43 +1,12 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState, useEffect } from 'react'
-import { LayoutGrid, Trophy, Ticket, Bookmark, TrendingUp, User, LogOut } from 'lucide-react'
+import { LayoutGrid, Trophy, Ticket, Bookmark, TrendingUp } from 'lucide-react'
 import { NotificationBell } from '@/components/ui/NotificationBell'
-import { supabaseBrowser } from '@/lib/supabase/client'
 
-function AccountButton() {
-  const [email, setEmail] = useState<string | null>(null)
-  const [open, setOpen]   = useState(false)
-  useEffect(() => {
-    const sb = supabaseBrowser()
-    sb.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
-    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setEmail(session?.user?.email ?? null))
-    return () => sub.subscription.unsubscribe()
-  }, [])
-  async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/' }
-
-  if (!email) return (
-    <Link href="/login" style={{ textDecoration: 'none' }}>
-      <div style={{ fontSize: 10, fontWeight: 800, color: '#1a0a00', background: 'var(--gold)', padding: '5px 12px', borderRadius: 20 }}>Log in</div>
-    </Link>
-  )
-  return (
-    <div style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(o => !o)} style={{ width: 30, height: 30, borderRadius: 999, background: 'var(--bg3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--offwhite)' }}>
-        <User size={15} />
-      </button>
-      {open && (
-        <div style={{ position: 'absolute', right: 0, top: 36, background: 'var(--bg2)', border: '1px solid var(--line)', borderRadius: 12, padding: 8, minWidth: 180, zIndex: 60, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
-          <div style={{ fontSize: 11, color: 'var(--muted)', padding: '4px 8px 8px', borderBottom: '1px solid var(--line)', marginBottom: 6, wordBreak: 'break-all' }}>{email}</div>
-          <button onClick={logout} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: 'var(--red)', fontSize: 13, fontWeight: 700, padding: '8px', cursor: 'pointer', borderRadius: 8 }}>
-            <LogOut size={14} /> Log out
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
+// Buyers don't log in (identified by the phone they pay with). Tipsters/admins
+// log in from /tipster and /admin respectively — there is no buyer account
+// button in the top bar.
 
 export function TopBar({ showBack = false, onBack }: { showBack?: boolean; onBack?: () => void }) {
   return (
@@ -60,7 +29,6 @@ export function TopBar({ showBack = false, onBack }: { showBack?: boolean; onBac
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gold)', background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.3)', padding: '4px 10px', borderRadius: 20 }}>Advertise</div>
         </Link>
         <NotificationBell />
-        <AccountButton />
       </div>
     </div>
   )

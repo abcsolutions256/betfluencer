@@ -3,32 +3,22 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
-import { supabaseBrowser } from '@/lib/supabase/client'
 
 export default function TipsterSignupPage() {
   const router = useRouter()
-  const [f, setF] = useState({ name: '', email: '', password: '', username: '', phone: '', sport: '', description: '' })
+  const [f, setF] = useState({ name: '', password: '', username: '', phone: '', sport: '', description: '' })
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF(s => ({ ...s, [k]: e.target.value }))
   const [err, setErr]         = useState('')
-  const [msg, setMsg]         = useState('')
   const [loading, setLoading] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    setErr(''); setMsg(''); setLoading(true)
-    const sb = supabaseBrowser()
-    const { data, error } = await sb.auth.signUp({
-      email: f.email.trim(), password: f.password,
-      options: { data: { display_name: f.name.trim() } },
-    })
-    if (error) { setLoading(false); setErr(error.message); return }
-    if (!data.session) { setLoading(false); setMsg('Check your email to confirm, then log in to finish tipster setup.'); return }
-
-    const res = await fetch('/api/tipster/register', {
+    setErr(''); setLoading(true)
+    const res = await fetch('/api/tipster/auth', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: f.name, username: f.username, phone: f.phone, sport: f.sport, description: f.description }),
+      body: JSON.stringify({ action: 'signup', ...f }),
     })
-    const d = await res.json()
+    const d = await res.json().catch(() => ({}))
     setLoading(false)
     if (!res.ok) { setErr(d.error || 'Could not create tipster account'); return }
     router.push('/tipster/dashboard'); router.refresh()
@@ -40,18 +30,16 @@ export default function TipsterSignupPage() {
         <div style={title}>Become a tipster</div>
         <div style={sub}>Post slips, get paid per sale</div>
         {err && <div style={errorBox}>{err}</div>}
-        {msg && <div style={okBox}>{msg}</div>}
         <input style={input} placeholder="Display name" value={f.name} onChange={set('name')} autoFocus />
-        <input style={input} type="email" placeholder="Email" value={f.email} onChange={set('email')} />
-        <input style={input} type="password" placeholder="Password (min 6)" value={f.password} onChange={set('password')} />
         <input style={input} placeholder="Username (public, e.g. enzo)" value={f.username} onChange={set('username')} />
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={prefix}>+256</div>
-          <input style={{ ...input, flex: 1 }} type="tel" placeholder="Payout Mobile Money number" value={f.phone} onChange={set('phone')} />
+          <input style={{ ...input, flex: 1 }} type="tel" placeholder="Mobile Money number (your login + payout)" value={f.phone} onChange={set('phone')} />
         </div>
+        <input style={input} type="password" placeholder="Password (min 8, incl. a number)" value={f.password} onChange={set('password')} />
         <input style={input} placeholder="Sport / leagues you cover" value={f.sport} onChange={set('sport')} />
         <textarea style={{ ...input, minHeight: 64, resize: 'vertical' }} placeholder="Short bio (optional)" value={f.description} onChange={set('description')} />
-        <button style={btn} disabled={loading || !f.email || f.password.length < 6 || !f.name || !f.username || f.phone.length < 7}>
+        <button style={btn} disabled={loading || f.password.length < 8 || !f.name || !f.username || f.phone.length < 7}>
           {loading ? <Loader2 size={16} className="spin" /> : 'Create tipster account'}
         </button>
         <div style={foot}>Already a tipster? <Link href="/tipster/login" style={lnk}>Log in</Link></div>
@@ -70,4 +58,3 @@ const btn: React.CSSProperties = { padding: 13, borderRadius: 12, border: 'none'
 const foot: React.CSSProperties = { fontSize: 12, color: 'var(--muted)', textAlign: 'center', marginTop: 6 }
 const lnk: React.CSSProperties = { color: 'var(--gold)', fontWeight: 700, textDecoration: 'none' }
 const errorBox: React.CSSProperties = { background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 10, padding: '9px 12px', fontSize: 13 }
-const okBox: React.CSSProperties = { background: 'var(--green-lt)', color: 'var(--green)', border: '1px solid rgba(46,204,122,0.3)', borderRadius: 10, padding: '9px 12px', fontSize: 13 }

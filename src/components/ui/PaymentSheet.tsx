@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import type { PaymentMethod, PaymentResult, TxnStatus } from '@/types/payments'
 import { isTerminal } from '@/types/payments'
-import { buyerHeader } from '@/lib/guestId'
+import { buyerHeader, setBuyerPhone } from '@/lib/guestId'
 
 interface Props {
   open:         boolean
@@ -121,11 +121,10 @@ export function PaymentSheet({
       })
       const data: PaymentResult = await res.json()
 
-      // Not logged in (or other rejection) — initiate returns non-2xx.
+      // initiate returns non-2xx on rejection (e.g. slip not verified yet).
       if (!res.ok) {
         setMessage((data as any)?.error || 'Could not start the payment.')
         setState('failed')
-        if (res.status === 401) setTimeout(() => { window.location.href = '/login' }, 1300)
         return
       }
 
@@ -158,9 +157,9 @@ export function PaymentSheet({
   // Auto-resolve on success after a short celebratory beat.
   useEffect(() => {
     if (state !== 'success') return
-    // Remember the identity the buyer paid with, so slip fetches can prove
-    // entitlement (server gates paid content on `buyer`). See entitlement.ts.
-    try { localStorage.setItem('bf_phone', payer) } catch {}
+    // Remember the phone/email the buyer paid with, so reveal / "my slips"
+    // prove entitlement (the server gates paid content on the buyer identity).
+    setBuyerPhone(payer)
     const t = setTimeout(() => {
       onDone({
         transaction_id: txnRef.current.transaction_id,

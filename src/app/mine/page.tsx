@@ -5,7 +5,7 @@ import { Avatar, VerifiedTick } from '@/components/ui'
 import { FollowButton } from '@/components/ui/FollowButton'
 import { Loader2, Users, Bookmark } from 'lucide-react'
 import { getFollows } from '@/lib/follows'
-import { buyerHeader } from '@/lib/guestId'
+import { getBuyerPhone, setBuyerPhone } from '@/lib/guestId'
 import Link from 'next/link'
 
 type MineTab = 'following' | 'purchases'
@@ -16,6 +16,7 @@ export default function MinePage() {
   const [tipsters, setTipsters] = useState<any[]>([])
   const [loading,  setLoading]  = useState(true)
   const [subs,     setSubs]     = useState<any[]>([])
+  const [lookup,   setLookup]   = useState('')
 
   // Load follows (stored locally, no login needed)
   useEffect(() => {
@@ -33,13 +34,27 @@ export default function MinePage() {
       .catch(() => setTipsters([]))
   }, [])
 
-  // Anonymous buyer — purchases are keyed on the localStorage guest id and
-  // sent to the API as the `x-buyer-key` header. No phone lookup, no login.
-  useEffect(() => {
-    fetch('/api/subscribe', { headers: buyerHeader() })
+  // Buyers don't log in — purchases are keyed on the phone they paid with.
+  // Use the stored phone on load; a returning buyer can re-enter their phone
+  // to recover purchases (incl. on another device).
+  function loadPurchases(phone: string) {
+    setLoading(true)
+    fetch('/api/subscribe', { headers: phone ? { 'x-buyer-phone': phone } : {} })
       .then(x => x.json()).catch(() => ({ subscriptions: [] }))
       .then(r => { setSubs(r.subscriptions ?? []); setLoading(false) })
+  }
+  useEffect(() => {
+    const p = getBuyerPhone()
+    setLookup(p)
+    if (p) loadPurchases(p); else setLoading(false)
   }, [])
+
+  function submitLookup() {
+    const p = lookup.trim()
+    if (!p) return
+    setBuyerPhone(p)
+    loadPurchases(p)
+  }
 
   const followedTipsters = tipsters.filter(t => follows.includes(t.id))
 
@@ -120,6 +135,18 @@ export default function MinePage() {
           {/* ── PURCHASES TAB ── */}
           {tab === 'purchases' && (
             <>
+              {/* Phone lookup — recover purchases by the number you paid with */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                <input
+                  value={lookup}
+                  onChange={e => setLookup(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') submitLookup() }}
+                  placeholder="Phone you paid with (+256…)"
+                  type="tel"
+                  style={{ flex: 1, padding: '11px 13px', borderRadius: 12, background: 'var(--bg3)', border: '1px solid var(--line)', color: 'var(--white)', fontSize: 14, outline: 'none' }}
+                />
+                <button onClick={submitLookup} disabled={!lookup.trim()} style={{ padding: '0 16px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', opacity: lookup.trim() ? 1 : 0.5 }}>Look up</button>
+              </div>
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '44px 0' }}><Loader2 size={26} color="var(--gold)" className="spin" /></div>
               ) : subs.length === 0 ? (

@@ -1,6 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test'
 import { signUpTipster, postManualSlip } from './fixtures'
-import { admin, newGuestKey } from './helpers'
+import { admin } from './helpers'
 
 // Helper: read the slip the tipster just posted (verified + pending) from the
 // feed so we know its id and price. Use the standalone `request` fixture (not
@@ -25,8 +25,8 @@ test.describe('guest purchase + reveal', () => {
     const slip = await findPendingSlip(request, odds)
 
     // ── Act: become an anonymous guest and buy via the UI ──
-    // Log the tipster out and clear storage so we're a clean guest (the page
-    // mints a fresh bf_guest key on first buyer request).
+    // A clean separate context = a fresh guest. The buyer is identified by the
+    // phone they pay with (stored as bf_buyer_phone after a successful payment).
     const guest = await browser.newContext()
     const gp = await guest.newPage()
     await gp.goto('/')
@@ -64,19 +64,19 @@ test.describe('guest purchase + reveal', () => {
       )
       .toBeGreaterThanOrEqual(1)
 
-    // The buyer's guest key (minted client-side, stored as bf_guest and sent as
-    // x-buyer-key) now unlocks the slip — reveal returns 200 with its content.
-    const buyerKey = await gp.evaluate(() => localStorage.getItem('bf_guest'))
-    expect(buyerKey, 'guest key should be set after purchase').toBeTruthy()
+    // The buyer's phone (stored as bf_buyer_phone after paying, sent as
+    // x-buyer-phone) now unlocks the slip — reveal returns 200 with its content
+    // (incl. the screenshot for a screenshot slip).
+    const buyerPhone = await gp.evaluate(() => localStorage.getItem('bf_buyer_phone'))
+    expect(buyerPhone, 'buyer phone should be stored after purchase').toBeTruthy()
     const revealed = await gp.request.get(`/api/slips/${slip.id}/reveal`, {
-      headers: { 'x-buyer-key': buyerKey! },
+      headers: { 'x-buyer-phone': buyerPhone! },
     })
     expect(revealed.ok(), await revealed.text()).toBeTruthy()
 
-    // ── Assert: a FRESH guest (no bf_guest / no purchase) is denied ──
-    const stranger = newGuestKey()
+    // ── Assert: a stranger (different phone, no purchase) is denied ──
     const denied = await gp.request.get(`/api/slips/${slip.id}/reveal`, {
-      headers: { 'x-buyer-key': stranger },
+      headers: { 'x-buyer-phone': '700000999' },
     })
     expect(denied.status()).toBe(403)
 

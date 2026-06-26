@@ -36,6 +36,7 @@ drop policy if exists "betslips_service_update"   on betslips;
 drop policy if exists "legs_public_read"   on betslip_legs;
 drop policy if exists "legs_service_write"  on betslip_legs;
 drop policy if exists "legs_service_update" on betslip_legs;
+drop policy if exists "legs_finished_public" on betslip_legs;   -- replay-safe: re-created below
 
 drop policy if exists "purchases_own_read"       on slip_purchases;
 drop policy if exists "purchases_service_insert"  on slip_purchases;
