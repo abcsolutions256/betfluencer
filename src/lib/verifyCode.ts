@@ -128,6 +128,18 @@ export async function recordVerification(args: {
     return Number.isFinite(n) ? n : null
   })()
 
+  // Auto-derive the slip's combined odds from the scrape so the tipster never
+  // has to type them: prefer the bookie's scraped total; otherwise multiply the
+  // normalised leg odds (accumulator math). Saved onto the betslip below.
+  const legOddsProduct = (() => {
+    const o = normalized
+      .map(n => (n.odds != null ? Number(String(n.odds).replace(/[^\d.]/g, '')) : NaN))
+      .filter(n => Number.isFinite(n) && n > 0)
+    if (o.length === 0) return null
+    return Math.round(o.reduce((a, b) => a * b, 1) * 100) / 100   // 2dp
+  })()
+  const computedOdds = totalOdds ?? legOddsProduct
+
   const row = {
     betslip_id:     args.betslip_id ?? null,
     betting_site:   args.betting_site,
@@ -135,7 +147,7 @@ export async function recordVerification(args: {
     matches:        rawMatches,
     normalized,                                  // the Gemini-normalised legs (secret)
     summary:        result?.summary ?? null,
-    total_odds:     totalOdds,
+    total_odds:     computedOdds,
     raw_text:       result?.raw_text ?? '',
     match_count:    result?.count ?? rawMatches.length,
     found:          result?.found ?? false,
@@ -171,7 +183,7 @@ export async function recordVerification(args: {
         game_count,
         leagues, markets,
         earliest_kickoff:    kicks.length ? new Date(Math.min(...kicks)).toISOString() : null,
-        ...(totalOdds != null ? { total_odds: totalOdds } : {}),   // odds are public proof, not a secret
+        ...(computedOdds != null ? { total_odds: computedOdds } : {}),   // auto-derived; public proof, not a secret
       }).eq('id', args.betslip_id)
 
       // ── Unified-settlement seam (merge: stag ← main) ──────────────────
