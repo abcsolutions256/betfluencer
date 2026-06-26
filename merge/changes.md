@@ -234,8 +234,8 @@ What changed:
 - **Email/Supabase scrapped** — deleted `/login` + `/signup` pages, removed the TopBar
   account button; `auth/logout` clears the cookie; anon/session supabase clients now unused
   (files left in place). Card `user_email` kept (an ioTec card detail, not a login).
-- **Env** — add `ADMIN_PHONES` (comma list); `SESSION_SECRET` optional. Documented in
-  `.env.local.example`. **CLAUDE.md updated.**
+- **Env** — `ADMIN_PASSWORD` (single master admin password); `SESSION_SECRET` optional.
+  Documented in `.env.local.example`. **CLAUDE.md updated.**
 - **e2e** — fixtures/specs/`scripts/e2e.sh`/`global-setup` switched to phone auth
   (tipster phone signup/login, admin phone login, buyer reveal by `x-buyer-phone`).
 
