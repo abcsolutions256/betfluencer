@@ -238,7 +238,10 @@ What changed:
 - **e2e** — fixtures/specs/`scripts/e2e.sh`/`global-setup` switched to phone auth
   (tipster phone signup/login, admin phone login, buyer reveal by `x-buyer-phone`).
 
-Verification: **`npm run build` green (twice)**. The `npm run test:e2e` merge gate could not
-complete in this environment — `supabase start` failed on flaky-network truncated image pulls
-+ an unhealthy Logflare analytics container (Playwright never ran). Re-run on a stable network
-(or with analytics excluded) to close the gate.
+Verification: **`npm run build` green; `npm run test:e2e` GREEN — 7/7 specs pass** (phone
+tipster signup/login, manual + coded slips, guest purchase→reveal by phone, admin phone
+login, rankings). Local-env notes for re-running the gate here: start Supabase excluding the
+flaky analytics/vector containers (`supabase start -x vector,logflare,...`); the npx-latest
+CLI (2.108.0) needed an explicit `grant ... to service_role/anon` on the public tables after
+`db reset`; and `npx playwright install chromium` to match the bundled build. None of these
+touch app code.

@@ -5,7 +5,7 @@ Guide for Claude Code / any agent working in this repo. Read this first. Full sy
 ## What this is
 Football **tipster marketplace** for Uganda. Tipsters post betslips; users **pay per slip** over Mobile Money to unlock the picks. Finished slips (win/loss) are free to view; pending slips are the paid product. Mobile-first PWA. Client is **ABC Solutions** (Abdallah Kambugu). Sister product **Visit Africa** (travel site, SEO work) is a separate repo.
 
-Business model: **pay-per-slip**, not subscriptions. Platform takes **10%** commission at transaction time, tipster gets 90%. No funds held — collect from buyer, disburse to tipster, refund if disbursement fails.
+Business model: **pay-per-slip**, not subscriptions. Platform takes **10%** commission at transaction time, tipster gets 90%. Collect from buyer automatically; **tipster payouts are disbursed MANUALLY by an admin** (no auto-disbursement — 2026-06-26). Each sale records an earning + a `pending` `tipster_payout` disbursement row as the manual-payout queue.
 
 ## Stack
 - **Next.js 14.2.3** App Router + **React 18** + **TypeScript** + **Tailwind** (inline styles + CSS vars in `globals.css`).
@@ -53,7 +53,7 @@ Note: `betslips`/`betslip_legs`/`slip_purchases` have **NO `created_at`** — do
 
 ## Payments (ioTec Pay — implemented 2026-06-10)
 - **Client:** `src/lib/iotec.ts` — OAuth2 via `id.iotec.io/connect/token` → Bearer; `collect`/`getCollectionStatus`/`disburse`/`getWalletBalance`; **demo mode** when `IOTEC_CLIENT_ID` is empty/`demo` (no real charges, polling resolves to success).
-- **Flow:** buy button → `POST /api/payments/initiate` (creates pending `transactions` + `slip_purchases`, calls ioTec collect — MoMo = phone prompt, Card = `card_redirect_url`) → confirm via `POST /api/webhooks/iotec` (security-header check **+ status refetch**, never trusts the payload) or `GET /api/payments/status` polling → `fulfillTransaction` unlocks the purchase, disburses 90% to the **tipster's** phone, logs the earning (idempotent on `slip_purchases.status`).
+- **Flow:** buy button → `POST /api/payments/initiate` (creates pending `transactions` + `slip_purchases`, calls ioTec collect — MoMo = phone prompt, Card = `card_redirect_url`) → confirm via `POST /api/webhooks/iotec` (security-header check **+ status refetch**, never trusts the payload) or `GET /api/payments/status` polling → `fulfillTransaction` unlocks the purchase, logs the earning, and records a **`pending` `tipster_payout` disbursement** (idempotent on `slip_purchases.status`). **No auto-disbursement** — an admin pays the tipster manually (the `disburse()` lib fn remains for a future manual-payout action).
 - **UI:** `usePayment()` hook + `<PaymentSheet>` (bottom sheet that persists until terminal) + `<BuySlipButton>`; wired into `BetslipFeed` and `slips`. Card payments return to `/pay/return`.
 - **Ledger:** every collection + payout is a row in `transactions`; admin → **Transactions** tab.
 - **Before production:** apply `supabase/migrations/20260610000002_transactions.sql` to the live DB and set `IOTEC_*` env (incl. `IOTEC_AUTH_URL`, `IOTEC_WEBHOOK_SECRET` = the callback security header configured in the ioTec portal).
