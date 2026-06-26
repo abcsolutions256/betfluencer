@@ -102,11 +102,9 @@ export PORT="$PORT"
 # service-role key if unset, but pin it for determinism across app+specs.
 export SESSION_SECRET="${SESSION_SECRET:-e2e-session-secret}"
 
-# Admin = a designated phone + password (no DB seeding). The app reads
-# ADMIN_PHONES/ADMIN_PASSWORD; specs read the E2E_ADMIN_* mirrors.
-export E2E_ADMIN_PHONE="${E2E_ADMIN_PHONE:-+256700000000}"
+# Admin = a single master password (no DB seeding). The app reads
+# ADMIN_PASSWORD; specs read the E2E_ADMIN_PASSWORD mirror.
 export E2E_ADMIN_PASSWORD="${E2E_ADMIN_PASSWORD:-e2eAdmin123!}"
-export ADMIN_PHONES="$E2E_ADMIN_PHONE"
 export ADMIN_PASSWORD="$E2E_ADMIN_PASSWORD"
 
 # ── 4. Start the app ──────────────────────────────────────────────────────

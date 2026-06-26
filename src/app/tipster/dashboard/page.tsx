@@ -396,13 +396,16 @@ export default function TipsterDashboard() {
                     <input className="inp" style={{ fontSize: 18, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }} placeholder="e.g. ABC123" value={slip.booking_code || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, booking_code: e.target.value.toUpperCase() } : sl))} />
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       <div>
-                        <label className="lbl">Total odds</label>
-                        <input className="inp" type="number" step="0.01" placeholder="e.g. 12.40" value={slip.total_odds || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, total_odds: e.target.value } : sl))} />
+                        <label className="lbl">Total odds <span style={{ color: 'var(--muted)', fontWeight: 500 }}>(auto)</span></label>
+                        <input className="inp" type="number" step="0.01" placeholder="Auto from code" value={slip.total_odds || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, total_odds: e.target.value } : sl))} />
                       </div>
                       <div>
-                        <label className="lbl">No. of legs</label>
-                        <input className="inp" type="number" placeholder="e.g. 4" value={slip.leg_count || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, leg_count: e.target.value } : sl))} />
+                        <label className="lbl">No. of legs <span style={{ color: 'var(--muted)', fontWeight: 500 }}>(auto)</span></label>
+                        <input className="inp" type="number" placeholder="Auto from code" value={slip.leg_count || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, leg_count: e.target.value } : sl))} />
                       </div>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+                      Odds &amp; legs are read from the booking code automatically — leave blank.
                     </div>
                     <label className="lbl" style={{ marginTop: 8 }}>Note (optional)</label>
                     <input className="inp" value={slip.note || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, note: e.target.value } : sl))} />

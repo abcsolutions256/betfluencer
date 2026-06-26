@@ -218,9 +218,10 @@ What changed:
   with the cookie. `src/middleware.ts` reduced to a no-op (no Supabase refresh).
 - **Tipster** — `POST /api/tipster/auth` (login/signup, phone+password → cookie); removed
   `/api/tipster/register`; login/signup pages rewritten phone-only.
-- **Admin** — `POST /api/admin/login` (phone ∈ `ADMIN_PHONES` + `ADMIN_PASSWORD` → admin
-  cookie, server-validated, not forgeable). Inline login gate on `src/app/admin/page.tsx`.
-  All `/api/admin/*` keep `requireRole('admin')`.
+- **Admin** — `POST /api/admin/login` (single master password `ADMIN_PASSWORD`, as on main →
+  admin cookie, server-validated HMAC, not forgeable). Inline password gate on
+  `src/app/admin/page.tsx`. All `/api/admin/*` keep `requireRole('admin')`. (The phone+
+  `ADMIN_PHONES` variant was reverted to the single-password model 2026-06-26.)
 - **Buyer = phone** — `src/lib/buyer.ts` (`buyerIdentity`/`buyerFromRequest`); entitlement
   keyed on `slip_purchases.user_phone` in `payments/initiate`, `slips/[id]/reveal`,
   `subscribe`. `src/lib/guestId.ts` → `bf_buyer_phone` + `x-buyer-phone`. Mine page = phone
@@ -233,8 +234,8 @@ What changed:
 - **Email/Supabase scrapped** — deleted `/login` + `/signup` pages, removed the TopBar
   account button; `auth/logout` clears the cookie; anon/session supabase clients now unused
   (files left in place). Card `user_email` kept (an ioTec card detail, not a login).
-- **Env** — add `ADMIN_PHONES` (comma list); `SESSION_SECRET` optional. Documented in
-  `.env.local.example`. **CLAUDE.md updated.**
+- **Env** — `ADMIN_PASSWORD` (single master admin password); `SESSION_SECRET` optional.
+  Documented in `.env.local.example`. **CLAUDE.md updated.**
 - **e2e** — fixtures/specs/`scripts/e2e.sh`/`global-setup` switched to phone auth
   (tipster phone signup/login, admin phone login, buyer reveal by `x-buyer-phone`).
 

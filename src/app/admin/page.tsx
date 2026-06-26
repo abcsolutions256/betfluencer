@@ -612,7 +612,6 @@ export default function AdminPage() {
   const [checking, setChecking] = useState(true)
   const [stats,    setStats]    = useState({ subscribers: 0, tipsters: 0, commission: 0, liveAds: 0 })
   const [activity, setActivity] = useState<{ text: string; time: string }[]>([])
-  const [phone,    setPhone]    = useState('')
   const [pw,       setPw]       = useState('')
   const [loginErr, setLoginErr] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
@@ -625,7 +624,7 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    // Admin = a valid admin session cookie (phone + password).
+    // Admin = a valid admin session cookie (master password).
     fetch('/api/admin/me')
       .then(r => { if (!r.ok) return; setAuthed(true); loadStats() })
       .finally(() => setChecking(false))
@@ -636,7 +635,7 @@ export default function AdminPage() {
     setLoginErr(''); setLoggingIn(true)
     const res = await fetch('/api/admin/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: phone.trim(), password: pw }),
+      body: JSON.stringify({ password: pw }),
     })
     const d = await res.json().catch(() => ({}))
     setLoggingIn(false)
@@ -656,11 +655,10 @@ export default function AdminPage() {
       <form onSubmit={login} style={{ width: '100%', maxWidth: 320, background: 'var(--bg2)', border: '1px solid var(--line)', borderRadius: 18, padding: 24 }}>
         <Shield size={28} color="var(--gold)" style={{ margin: '0 auto 12px', display: 'block' }} />
         <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--white)', marginBottom: 6, textAlign: 'center' }}>Admin access</div>
-        <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, textAlign: 'center' }}>Log in with your admin phone + password.</div>
+        <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, textAlign: 'center' }}>Enter the admin password.</div>
         {loginErr && <div style={{ background: 'var(--red-lt)', color: 'var(--red)', borderRadius: 10, padding: '9px 12px', fontSize: 13, marginBottom: 10 }}>{loginErr}</div>}
-        <input className="inp" type="tel" placeholder="Admin phone (+256…)" value={phone} onChange={e => setPhone(e.target.value)} style={{ marginBottom: 8 }} autoFocus />
-        <input className="inp" type="password" placeholder="Password" value={pw} onChange={e => setPw(e.target.value)} style={{ marginBottom: 12 }} />
-        <button className="btn-gold" disabled={loggingIn || !phone || !pw} style={{ width: '100%', opacity: (loggingIn || !phone || !pw) ? 0.5 : 1 }}>
+        <input className="inp" type="password" placeholder="Admin password" value={pw} onChange={e => setPw(e.target.value)} style={{ marginBottom: 12 }} autoFocus />
+        <button className="btn-gold" disabled={loggingIn || !pw} style={{ width: '100%', opacity: (loggingIn || !pw) ? 0.5 : 1 }}>
           {loggingIn ? 'Logging in…' : 'Log in'}
         </button>
       </form>
