@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test'
 import { signUpTipster, postManualSlip, loginAdmin } from './fixtures'
 import { admin } from './helpers'
 
-// Feature 6 — Admin hide. The admin (phone + password, ADMIN_PHONES env) logs
-// in, hides a slip; it disappears from the public feed but stays on the
-// tipster's own dashboard (tagged "Hidden by admin").
+// Feature 6 — Admin hide. The admin (single master password, ADMIN_PASSWORD
+// env) logs in, hides a slip; it disappears from the public feed but stays on
+// the tipster's own dashboard (tagged "Hidden by admin").
 test.describe('admin hide', () => {
   test('hiding a slip removes it from the public feed but keeps it on the tipster dashboard', async ({ page, browser, request }) => {
     // ── A tipster posts a verified slip ──
@@ -23,7 +23,7 @@ test.describe('admin hide', () => {
     // ── Admin logs in (separate context) and hides the slip ──
     const adminCtx = await browser.newContext()
     const ap = await adminCtx.newPage()
-    await loginAdmin(ap, process.env.E2E_ADMIN_PHONE!, process.env.E2E_ADMIN_PASSWORD!)
+    await loginAdmin(ap, process.env.E2E_ADMIN_PASSWORD!)
 
     // Confirm the admin panel recognises the session (role gate).
     const meRes = await ap.request.get('/api/admin/me')

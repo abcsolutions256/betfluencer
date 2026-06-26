@@ -44,11 +44,10 @@ export async function loginTipster(page: Page, creds: TipsterCreds) {
   await expect(page).toHaveURL(/\/tipster\/dashboard/, { timeout: 30_000 })
 }
 
-// Log in the admin via the /admin gate (phone + password → admin session).
-export async function loginAdmin(page: Page, phone: string, password: string) {
+// Log in the admin via the /admin gate (single master password → admin session).
+export async function loginAdmin(page: Page, password: string) {
   await page.goto('/admin')
-  await page.getByPlaceholder('Admin phone (+256…)').fill(phone)
-  await page.getByPlaceholder('Password').fill(password)
+  await page.getByPlaceholder('Admin password').fill(password)
   await page.getByRole('button', { name: 'Log in' }).click()
   // The admin panel header appears once the session is accepted.
   await expect(page.getByText('Betfluencer HQ')).toBeVisible({ timeout: 30_000 })
