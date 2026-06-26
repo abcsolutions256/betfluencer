@@ -1,6 +1,8 @@
-// Marketplace feed — VERIFIED slips only, PROOF only. The booking code /
-// site / picks are never in this response (secrets live in betslip_secrets
-// / betslip_legs); buyers fetch them post-purchase via /api/slips/[id]/reveal.
+// Marketplace feed — LIVE (pending) slips only, PROOF only. Finished/passed
+// slips (win/loss/void) are NOT shown on the home feed — they live on the
+// channel pages (/api/tipster/[slug]/slips). The booking code / site / picks
+// are never in this response (secrets live in betslip_secrets / betslip_legs);
+// buyers fetch them post-purchase via /api/slips/[id]/reveal.
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { fetchHiddenSlipIds } from '@/lib/slipStatus'
@@ -17,7 +19,8 @@ export async function GET() {
   const { data: slips, error } = await db
     .from('betslips')
     .select('id, tipster_id, posting_mode, total_odds, leg_count, game_count, leagues, markets, earliest_kickoff, verification_status, result, slip_price, posted_at, tipsters ( id, name, username )')
-    // .or('verification_status.eq.verified,result.eq.win,result.eq.loss')
+    // LIVE only — finished/passed slips (win/loss/void) belong on channel pages.
+    .eq('result', 'pending')
     .order('posted_at', { ascending: false })
     .limit(50)
 
@@ -25,7 +28,7 @@ export async function GET() {
 
   const hidden = await fetchHiddenSlipIds(db)   // admin-hidden slips (best-effort)
   const formatted = (slips ?? [])
-    .filter((s: any) => !hidden.has(s.id))      // show ALL verified slips except admin-hidden ones
+    .filter((s: any) => !hidden.has(s.id))      // live slips except admin-hidden ones
     .map((s: any) => ({
       slip: {
         ...s,
