@@ -1,8 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Lock } from 'lucide-react'
 
 export default function TipsterSignupPage() {
   const router = useRouter()
@@ -10,6 +10,15 @@ export default function TipsterSignupPage() {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF(s => ({ ...s, [k]: e.target.value }))
   const [err, setErr]         = useState('')
   const [loading, setLoading] = useState(false)
+  // null = still checking; false = signups closed → show the closed panel.
+  const [open, setOpen] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then(r => r.json())
+      .then(d => setOpen(d.publicSignupsEnabled === true))
+      .catch(() => setOpen(false))
+  }, [])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -22,6 +31,29 @@ export default function TipsterSignupPage() {
     setLoading(false)
     if (!res.ok) { setErr(d.error || 'Could not create tipster account'); return }
     router.push('/tipster/dashboard'); router.refresh()
+  }
+
+  if (open === null) {
+    return (
+      <div style={shell}>
+        <Loader2 size={22} className="spin" color="var(--muted)" />
+      </div>
+    )
+  }
+
+  if (open === false) {
+    return (
+      <div style={shell}>
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+            <Lock size={28} color="var(--gold)" />
+          </div>
+          <div style={{ ...title, textAlign: 'center' }}>Signups are closed</div>
+          <div style={{ ...sub, textAlign: 'center' }}>New tipster accounts are added by the Betfluencer team. Contact the admin to get set up.</div>
+          <div style={foot}>Already a tipster? <Link href="/tipster/login" style={lnk}>Log in</Link></div>
+        </div>
+      </div>
+    )
   }
 
   return (

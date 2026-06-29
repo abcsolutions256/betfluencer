@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
@@ -10,6 +10,15 @@ export default function TipsterLoginPage() {
   const [password, setPassword] = useState('')
   const [err, setErr]           = useState('')
   const [loading, setLoading]   = useState(false)
+  // Only show the "Sign up" link when public signups are open.
+  const [signupsOpen, setSignupsOpen] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then(r => r.json())
+      .then(d => setSignupsOpen(d.publicSignupsEnabled === true))
+      .catch(() => setSignupsOpen(false))
+  }, [])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -38,7 +47,7 @@ export default function TipsterLoginPage() {
         <button style={btn} disabled={loading || !phone || !password}>
           {loading ? <Loader2 size={16} className="spin" /> : 'Log in'}
         </button>
-        <div style={foot}>New tipster? <Link href="/tipster/signup" style={lnk}>Sign up</Link></div>
+        {signupsOpen && <div style={foot}>New tipster? <Link href="/tipster/signup" style={lnk}>Sign up</Link></div>}
       </form>
     </div>
   )

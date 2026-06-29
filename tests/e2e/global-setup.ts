@@ -21,8 +21,19 @@ async function ensureSchema() {
   }
 }
 
+// Public tipster self-signup defaults to CLOSED in the app. The signup fixture
+// drives the real /tipster/signup UI, so open it in the test DB. (The dedicated
+// closed-signup spec flips it off and restores it.)
+async function openSignups() {
+  const db = admin()
+  await db
+    .from('platform_settings')
+    .upsert({ key: 'public_signups_enabled', value: 'true' }, { onConflict: 'key' })
+}
+
 export default async function globalSetup(_config: FullConfig) {
   // Expose the admin password to specs (they read this from env).
   process.env.E2E_ADMIN_PASSWORD = ADMIN_PASSWORD
   await ensureSchema()
+  await openSignups()
 }
