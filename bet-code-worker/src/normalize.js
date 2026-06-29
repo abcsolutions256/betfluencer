@@ -31,6 +31,7 @@ FOR EVERY SELECTION, determine:
 
 2) MARKET. Identify the betting market and output a canonical code in "market":
    - "1X2"   = match result / full-time result / three-way. This is the DEFAULT and most common when unsure but a team/draw is picked.
+   - "1X2_1UP" (betPawa "1 UP"): a 1X2-shaped pick (Home/Draw/Away, symbols 1/X/2) that settles the MOMENT the selection goes one goal ahead, NOT at full time. Recognise it from text like "1X2 1UP", "1 UP", "1UP | Full Time". Set "market" to the DISTINCT code "1X2_1UP" (NOT plain "1X2"; the pick symbols are still 1/X/2) and set "marketLabel" to "1X2 1UP" (never flatten it to "Match Result (1X2)") and state "1UP — settles when the pick leads by one goal" in the leg summary.
    - "DC"    = Double Chance.
    - "Over/Under (OU)"    = Over/Under / Totals (record the line, e.g. 2.5, in "line").
    - "BTTS"  = Both Teams To Score / GG-NG.
@@ -60,6 +61,7 @@ FOR EVERY SELECTION, determine:
 
 HARD RULES
 - NEVER invent teams, picks, markets or times not supported by the input. Unknown -> null (or "OTHER"/"n/a"), never a guess presented as fact.
+- If the scraped market text contains "1UP" or "1 UP" (betPawa), the market MUST be the distinct code "1X2_1UP" and the marketLabel MUST contain "1X2 1UP" — never collapse it to plain "1X2" / "Match Result (1X2)". Settlement of these is different (settles on a one-goal lead), so the code + label must reveal the variant.
 - Be deterministic: identical input must yield identical output.
 - Keep team names exactly as written in the input.
 - If "matches" and "raw_text" disagree, prefer "raw_text" (closest to what the bookie actually displays).
@@ -94,6 +96,7 @@ You will receive a JSON input containing:
 ### Rule B: Canonical Market Classification
 Map the scraped market variant to one of these exact canonical codes:
 * 1X2: Full-Time Result, 3-Way, Match Result, Regular Time.
+* 1X2_1UP (betPawa "1 UP", text like "1X2 1UP", "1 UP", "1UP | Full Time"): a 1X2-shaped pick that settles the instant the selection leads by one goal. Set canonicalMarket/market to the DISTINCT code "1X2_1UP" (NOT plain "1X2"; symbols stay 1/X/2) and set marketLabel to EXACTLY "1X2 1UP" — never flatten it to "Match Result (1X2)" — and note "1UP — settles when the pick leads by one goal" in the leg summary/legExplanation.
 * DC: Double Chance (Options: 1X, 12, X2).
 * Over/Under (OU): Totals, Match Goals, Under/Over. (Extract the threshold to the line field, e.g., 2.5).
 * BTTS: Both Teams To Score, GG/NG, Goal/No Goal. (Map choices to "Yes" or "No").
@@ -137,7 +140,7 @@ Your output must conform exactly to this JSON structure:
       "index": 0,
       "homeTeam": "string",
       "awayTeam": "string",
-      "canonicalMarket": "1X2 | DC | Over/Under (OU) | BTTS | DNB | AH | EH | CS | OTHER",
+      "canonicalMarket": "1X2 | 1X2_1UP | DC | Over/Under (OU) | BTTS | DNB | AH | EH | CS | OTHER",
       "marketLabel": "string",
       "line": "string or null",
       "pickSymbol": "string",
@@ -171,7 +174,7 @@ export const RESPONSE_SCHEMA = {
           teams:       { type: 'STRING' },
           homeTeam:    { type: 'STRING', description: 'first team = symbol "1"' },
           awayTeam:    { type: 'STRING', description: 'second team = symbol "2"' },
-          market:      { type: 'STRING', description: '1X2 | DC | OU | BTTS | DNB | AH | EH | CS | OTHER' },
+          market:      { type: 'STRING', description: '1X2 | 1X2_1UP | DC | OU | BTTS | DNB | AH | EH | CS | OTHER' },
           marketLabel: { type: 'STRING' },
           pickSymbol:  { type: 'STRING', description: 'market symbol: 1 / X / 2 / "Over 2.5" / Yes …' },
           pickSide:    { type: 'STRING', enum: ['home', 'away', 'draw', 'n/a'] },

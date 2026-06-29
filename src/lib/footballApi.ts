@@ -141,6 +141,11 @@ function determineResult(pick: string, data: {
 }): VerifyResult {
   const { homeGoals, awayGoals, totalGoals, htHome, htAway, home, away } = data
 
+  // betPawa "1X2 1UP" settles the instant the pick goes one goal ahead — a team
+  // can lead 1-0, lose 1-2, and the bet still WON. The final score can't grade
+  // it, so never auto-settle; leave it for an admin to settle manually.
+  if (/\b1\s*up\b/.test(pick)) return 'unverifiable'
+
   const overMatch = pick.match(/over\s+(\d+\.?\d*)/)
   if (overMatch) {
     const line = parseFloat(overMatch[1])

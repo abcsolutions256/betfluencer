@@ -27,17 +27,30 @@ function pickForLeg(n: NormalizedLeg): string {
   const label  = (n.marketLabel ?? '').toString().trim()
   switch (market) {
     case 'OU': {
-      const dir = /under/i.test(`${sym} ${label}`) ? 'under' : 'over'
-      const ln  = line || (`${sym} ${label}`.match(/(\d+\.?\d*)/)?.[1] ?? '')
+      // Direction comes from the pick SYMBOL ("Over 1.5" / "Under 2.5") only.
+      // Never sniff marketLabel — it reads "Over/Under 1.5 — Full Time" and
+      // literally contains the word "Under", which forced EVERY O/U leg to
+      // "under" (the reveal showed "Over 1.5" while Settle showed "under 1.5").
+      const dir = /under/i.test(sym) ? 'under' : 'over'
+      const ln  = line || sym.match(/(\d+\.?\d*)/)?.[1] || label.match(/(\d+\.?\d*)/)?.[1] || ''
       return `${dir} ${ln}`.trim()
     }
     case 'BTTS':
       return /\b(no|not)\b/i.test(sym) ? 'btts no' : 'btts yes'
     case '1X2':
-      if (side === 'home' || sym === '1') return 'home win'
-      if (side === 'away' || sym === '2') return 'away win'
-      if (side === 'draw' || /^x$/i.test(sym)) return 'draw'
-      return (sym || label).toLowerCase()
+    case '1X2_1UP': {
+      // betPawa "1X2 1UP" (canonical market 1X2_1UP) is a 1X2-shaped pick
+      // (symbols 1/X/2) but settles the moment the selection leads by one goal
+      // — the final score can't grade it, so tag it "1up" and let the settler
+      // route it to manual review.
+      const oneUp = market === '1X2_1UP' || /\b1\s*up\b/i.test(`${sym} ${label}`)
+      const base  =
+        (side === 'home' || sym === '1')      ? 'home win' :
+        (side === 'away' || sym === '2')      ? 'away win' :
+        (side === 'draw' || /^x$/i.test(sym)) ? 'draw'     :
+        (sym || label).toLowerCase()
+      return oneUp ? `${base} 1up` : base
+    }
     case 'DC': {
       const s = `${sym} ${label}`.toLowerCase().replace(/\s+/g, '')
       if (s.includes('1x')) return 'home or draw'
@@ -61,7 +74,7 @@ export interface NormalizedLeg {
   teams?: string
   homeTeam?: string
   awayTeam?: string
-  market?: string        // canonical: 1X2 | DC | OU | BTTS | DNB | AH | EH | CS | OTHER
+  market?: string        // canonical: 1X2 | 1X2_1UP | DC | OU | BTTS | DNB | AH | EH | CS | OTHER
   marketLabel?: string
   pickSymbol?: string     // 1 / X / 2 / "Over 2.5" / Yes …
   pickSide?: string       // home | away | draw | n/a

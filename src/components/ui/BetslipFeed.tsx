@@ -76,7 +76,7 @@ function BetslipCard({ slip, tipsterName, defaultOpen = false, owned = false, on
         {(leagues.length > 0 || markets.length > 0) && (
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
             {leagues.slice(0, 3).map((l, i) => <Chip key={'l' + i}>{l}</Chip>)}
-            {markets.slice(0, 3).map((m, i) => <Chip key={'m' + i}>{m}</Chip>)}
+            {markets.slice(0, 3).map((m, i) => <Chip key={'m' + i}>{String(m).replace(/_/g, ' ')}</Chip>)}
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
