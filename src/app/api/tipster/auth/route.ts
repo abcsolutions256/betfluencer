@@ -10,6 +10,7 @@ import { hashPassword, verifyPassword, isStrongPassword, normalisePhone } from '
 import { getTipsterByPhone, createTipsterAccount } from '@/lib/db'
 import { createSession } from '@/lib/auth/session'
 import { supabaseServer } from '@/lib/supabase'
+import { publicSignupsEnabled } from '@/lib/settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,11 @@ export async function POST(req: NextRequest) {
 
   // ── SIGNUP ──────────────────────────────────────────────────────
   if (body.action === 'signup') {
+    // Self-signup is gated by the admin "Public signups" flag (default OFF).
+    // When closed, only an admin can create tipsters (POST /api/admin/tipsters).
+    if (!(await publicSignupsEnabled()))
+      return NextResponse.json({ error: 'Tipster signups are currently closed. Please contact the admin to get an account.' }, { status: 403 })
+
     const parsed = signupSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json({ error: 'Please fill in all required fields' }, { status: 400 })
 
