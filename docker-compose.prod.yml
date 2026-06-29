@@ -77,15 +77,25 @@ services:
     environment:
       SYNC_TOKEN: ${SYNC_TOKEN}
       SYNC_INTERVAL: ${SYNC_INTERVAL:-300}
+      # Auto-settle finished slips less often than codes/reconcile — the
+      # football API free tier is 100 requests/day. Default 6h (~4 runs/day).
+      VERIFY_INTERVAL: ${VERIFY_INTERVAL:-21600}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        echo "sync: web healthy — polling sync-codes + payments/reconcile every $${SYNC_INTERVAL:-300}s";
+        echo "sync: web healthy — codes+reconcile every $${SYNC_INTERVAL:-300}s, settle every $${VERIFY_INTERVAL:-21600}s";
+        last_verify=0;
         while true; do
           curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/slips/sync-codes \
             && echo "" || echo "sync: codes unreachable, will retry";
           curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/payments/reconcile \
             && echo "" || echo "sync: reconcile unreachable, will retry";
+          now=$$(date +%s);
+          if [ $$((now - last_verify)) -ge $${VERIFY_INTERVAL:-21600} ]; then
+            curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/verify \
+              && echo "" || echo "sync: verify unreachable, will retry";
+            last_verify=$$now;
+          fi;
           sleep "$${SYNC_INTERVAL:-300}";
         done
     restart: unless-stopped
