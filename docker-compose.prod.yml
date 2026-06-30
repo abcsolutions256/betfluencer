@@ -1,0 +1,104 @@
+# ── Betfluencer — PRODUCTION ──────────────────────────────────────
+# Built images (Next standalone). No source mounts, no hot reload.
+# `web` is NOT published — run it behind a reverse proxy (Coolify/Traefik)
+# that connects over the compose network. For local dev with hot reload,
+# use the default docker-compose.yml instead.
+#
+#   docker compose -f docker-compose.prod.yml up --build -d
+#
+# Values come from the root `.env`. Required:
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_APP_URL,
+#   SUPABASE_SERVICE_ROLE_KEY, IOTEC_*, ANTHROPIC_API_KEY, ADMIN_PASSWORD,
+#   BET_CODE_WORKER_KEY, SYNC_TOKEN  (optional: SYNC_INTERVAL, SYNC_BATCH).
+
+name: betfluencer
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* are inlined at build time.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    env_file: .env
+    environment:
+      # Pin the app port — overrides any PORT in .env (the worker uses 8080;
+      # env_file would otherwise leak that PORT into web).
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      # Reach the worker over the internal network (overrides any .env value).
+      BET_CODE_WORKER_URL: http://bet-code-worker:8080
+      BET_CODE_WORKER_KEY: ${BET_CODE_WORKER_KEY}
+      SYNC_TOKEN: ${SYNC_TOKEN}
+      SYNC_BATCH: ${SYNC_BATCH:-20}
+      # Stop re-scraping a 'failed' code after this many attempts (verified
+      # slips are never re-scraped — their selections are immutable).
+      SYNC_MAX_FAILED_RETRIES: ${SYNC_MAX_FAILED_RETRIES:-5}
+      # Bookie scraper gets blocked from datacenter IPs — disable the code-sync
+      # here and run it from a local stack. Payment reconcile is unaffected.
+      SYNC_CODES_ENABLED: ${SYNC_CODES_ENABLED:-false}
+    depends_on:
+      - bet-code-worker
+    # Liveness probe so `sync` waits for a real "Ready" before polling.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  bet-code-worker:
+    build:
+      context: ./bet-code-worker
+      dockerfile: Dockerfile
+    environment:
+      WORKER_API_KEY: ${BET_CODE_WORKER_KEY}
+      PORT: "8080"
+      MAX_CONCURRENT: ${WORKER_MAX_CONCURRENT:-2}
+      SCREENSHOT_TTL_HOURS: ${SCREENSHOT_TTL_HOURS:-48}
+      # Gemini response normalisation (unset GEMINI_API_KEY to disable).
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite}
+    volumes:
+      - screenshots:/app/screenshots
+    expose:
+      - "8080"            # internal only — not published
+    restart: unless-stopped
+
+  sync:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      web:
+        condition: service_healthy   # wait for web's real readiness, not a sleep
+    environment:
+      SYNC_TOKEN: ${SYNC_TOKEN}
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-300}
+      # Auto-settle finished slips less often than codes/reconcile — the
+      # football API free tier is 100 requests/day. Default 6h (~4 runs/day).
+      VERIFY_INTERVAL: ${VERIFY_INTERVAL:-21600}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "sync: web healthy — codes+reconcile every $${SYNC_INTERVAL:-300}s, settle every $${VERIFY_INTERVAL:-21600}s";
+        last_verify=0;
+        while true; do
+          curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/slips/sync-codes \
+            && echo "" || echo "sync: codes unreachable, will retry";
+          curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/payments/reconcile \
+            && echo "" || echo "sync: reconcile unreachable, will retry";
+          now=$$(date +%s);
+          if [ $$((now - last_verify)) -ge $${VERIFY_INTERVAL:-21600} ]; then
+            curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/verify \
+              && echo "" || echo "sync: verify unreachable, will retry";
+            last_verify=$$now;
+          fi;
+          sleep "$${SYNC_INTERVAL:-300}";
+        done
+    restart: unless-stopped
+
+volumes:
+  screenshots:

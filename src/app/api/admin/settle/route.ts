@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { requireRole } from '@/lib/auth/session'
 
 export const dynamic = 'force-dynamic'
 
-// Admin manual settlement.
-// POST { slip_id, result: 'win'|'loss'|'void'|'pending', admin_key }
+// Admin manual settlement (main feature, re-guarded onto Supabase Auth in the
+// stag merge — the legacy ADMIN_SETTLE_KEY/admin_key gate is removed; auth is
+// now the admin session cookie via requireRole('admin')).
+// POST { slip_id, result: 'win'|'loss'|'void'|'pending' }
 export async function POST(req: NextRequest) {
   try {
-    const { slip_id, result, admin_key } = await req.json()
-
-    // Gate with ADMIN_SETTLE_KEY env var if set; otherwise allow (uses admin token)
-    const expected = process.env.ADMIN_SETTLE_KEY
-    if (expected && admin_key !== expected) {
+    if (!(await requireRole('admin'))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const { slip_id, result } = await req.json()
 
     const valid = ['win', 'loss', 'void', 'pending']
     if (!slip_id || !valid.includes(result)) {
@@ -22,7 +23,8 @@ export async function POST(req: NextRequest) {
 
     const db = supabaseServer()
 
-    // Update the betslip result
+    // Update the betslip result ('void' allowed once migration 0012 widens the
+    // result CHECK on betslips + betslip_legs).
     const { error: slipError } = await db
       .from('betslips')
       .update({ result, result_proof_pending: false })
@@ -30,8 +32,8 @@ export async function POST(req: NextRequest) {
 
     if (slipError) return NextResponse.json({ error: slipError.message }, { status: 500 })
 
-    // Update all legs to match
-    if (result === 'win' || result === 'loss') {
+    // Cascade a decisive outcome to the legs (win/loss/void).
+    if (result === 'win' || result === 'loss' || result === 'void') {
       await db
         .from('betslip_legs')
         .update({ result })

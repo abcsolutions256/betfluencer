@@ -4,6 +4,10 @@ import { usePathname } from 'next/navigation'
 import { LayoutGrid, Trophy, Ticket, Bookmark, TrendingUp } from 'lucide-react'
 import { NotificationBell } from '@/components/ui/NotificationBell'
 
+// Buyers don't log in (identified by the phone they pay with). Tipsters/admins
+// log in from /tipster and /admin respectively — there is no buyer account
+// button in the top bar.
+
 export function TopBar({ showBack = false, onBack }: { showBack?: boolean; onBack?: () => void }) {
   return (
     <div style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--line)' }}

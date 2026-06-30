@@ -1,181 +1,47 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, X, Ticket, Loader2, Smartphone, CheckCircle } from 'lucide-react'
+import { Search, X, Ticket, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
 import { ODDS_FILTERS, getOddsFilter, parseOddsQuery, getRiskLabel } from '@/types/betslip'
-import type { Betslip, SlipLeg } from '@/types/betslip'
-import { resolveImageUrl } from '@/lib/imageUpload'
+import type { Betslip } from '@/types/betslip'
+import { PaymentSheet } from '@/components/ui/PaymentSheet'
+import { SlipReveal } from '@/components/ui/SlipReveal'
+import { buyerHeader } from '@/lib/guestId'
 
-// ── LEG ROW ───────────────────────────────────────────────────────
-function LegRow({ leg }: { leg: SlipLeg }) {
-  const dotColor = leg.result === 'win' ? 'var(--green)' : leg.result === 'loss' ? 'var(--red)' : 'var(--gold)'
-  return (
-    <div style={{ padding: '9px 14px', borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--white)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{leg.match}</div>
-        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>{leg.pick} · {leg.league}</div>
-      </div>
-      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gold)', flexShrink: 0 }}>{leg.odds.toFixed(2)}</div>
-    </div>
-  )
+type Row = { slip: Betslip; tipsterName: string; tipsterUsername: string }
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return <span style={{ background: 'var(--bg3)', color: 'var(--offwhite)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, border: '1px solid var(--line)' }}>{children}</span>
 }
 
-// ── SLIP CONTENT ──────────────────────────────────────────────────
-function SlipContent({ slip, tipsterUsername, router }: { slip: Betslip; tipsterUsername: string; router: any }) {
-  return (
-    <div>
-      {slip.posting_mode === 'screenshot' ? (
-        <>
-          <div style={{ padding: '12px 14px', borderTop: '1px solid var(--line)' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>Betslip screenshot</div>
-            {slip.slip_image_url ? (
-              <img src={resolveImageUrl(slip.slip_image_url)} alt="Betslip" style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(245,166,35,0.3)', display: 'block' }} />
-            ) : (
-              <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: 14, textAlign: 'center', border: '1px solid var(--line)', fontSize: 12, color: 'var(--muted)' }}>Screenshot not uploaded yet</div>
-            )}
-          </div>
-          {(slip.result === 'win' || slip.result === 'loss') && (
-            <div style={{ padding: '12px 14px', borderTop: '1px solid var(--line)' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>Result proof</div>
-              {slip.result_image_url ? (
-                <img src={resolveImageUrl(slip.result_image_url)} alt="Result" style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(46,204,122,0.35)', display: 'block' }} />
-              ) : (
-                <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: '10px 14px', fontSize: 11, color: 'var(--muted)', border: '1px solid var(--line)' }}>Result screenshot pending upload</div>
-              )}
-            </div>
-          )}
-        </>
-      ) : slip.posting_mode === 'booking_code' ? (
-        <div style={{ padding: '12px 14px', borderTop: '1px solid var(--line)' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>Booking code</div>
-          <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>{slip.betting_site}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--gold)', letterSpacing: 2 }}>{slip.booking_code}</div>
-            </div>
-            <button onClick={() => navigator.clipboard.writeText(slip.booking_code ?? '')} style={{ fontSize: 11, fontWeight: 700, padding: '6px 12px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
-              Copy code
-            </button>
-          </div>
-        </div>
-      ) : (
-        slip.legs?.map(leg => <LegRow key={leg.id} leg={leg} />)
-      )}
-      <div style={{ padding: '10px 14px 12px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => router.push(`/channel/${tipsterUsername}`)} style={{ fontSize: 12, fontWeight: 700, padding: '6px 14px', background: 'var(--bg3)', color: 'var(--offwhite)', border: '1px solid var(--line)', borderRadius: 20, cursor: 'pointer' }}>
-          View full channel →
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── BUY MODAL ─────────────────────────────────────────────────────
-function BuyModal({ slip, tipsterName, onClose }: {
-  slip: Betslip; tipsterName: string; onClose: (unlocked: boolean) => void
-}) {
-  const [phone, setPhone] = useState('')
-  const [step,  setStep]  = useState<'enter'|'prompt'|'processing'>('enter')
-
-  async function pay() {
-    setStep('processing')
-    const res = await fetch('/api/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        slip_id:    slip.id,
-        tipster_id: slip.tipster_id,
-        user_phone: `+256${phone}`,
-        user_name:  localStorage.getItem('bf_user_name') ?? '',
-      }),
-    })
-    const data = await res.json()
-    if (data.success) {
-      localStorage.setItem(`bf_slip_${slip.id}`, `+256${phone}`)
-      onClose(true)
-    } else {
-      setStep('enter')
-      alert(data.error ?? 'Payment failed. Try again.')
-    }
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => step !== 'processing' && onClose(false)}>
-      <div style={{ background: 'var(--bg2)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 480, padding: 20 }} onClick={e => e.stopPropagation()}>
-        {step === 'processing' ? (
-          <div style={{ textAlign: 'center', padding: '28px 0' }}>
-            <Loader2 size={44} color="var(--gold)" style={{ margin: '0 auto 14px', display: 'block', animation: 'slipspin 1s linear infinite' }} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 6 }}>Processing payment</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>Please wait — do not close</div>
-          </div>
-        ) : step === 'prompt' ? (
-          <div style={{ textAlign: 'center', padding: '10px 0' }}>
-            <Smartphone size={40} color="var(--gold)" style={{ margin: '0 auto 14px', display: 'block' }} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 4 }}>Check your phone</div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 6 }}>Enter your PIN to pay</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--gold)', marginBottom: 20 }}>UGX {slip.slip_price.toLocaleString()}</div>
-            <button onClick={pay} style={{ width: '100%', padding: '13px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', marginBottom: 8 }}>
-              I've entered my PIN — show me the slip
-            </button>
-            <button onClick={() => setStep('enter')} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-              Didn't receive it?
-            </button>
-          </div>
-        ) : (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 2 }}>Buy this slip</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{tipsterName} · {slip.legs?.length ?? slip.leg_count} legs · odds {(slip.total_odds ?? 0).toFixed(2)}</div>
-              </div>
-              <button onClick={() => onClose(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--muted)', lineHeight: 1, padding: 0 }}>×</button>
-            </div>
-            <div style={{ background: 'var(--bg3)', borderRadius: 12, padding: '10px 14px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>One-time purchase</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Unlocks this slip only · No subscription</div>
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--gold)' }}>UGX {slip.slip_price.toLocaleString()}</div>
-            </div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--off)', display: 'block', marginBottom: 6 }}>Your Mobile Money number</label>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-              <div style={{ padding: '12px 10px', background: 'var(--bg3)', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: 10, fontWeight: 800, color: 'var(--offwhite)', fontSize: 13, flexShrink: 0 }}>+256</div>
-              <input autoFocus style={{ flex: 1, padding: '12px', background: 'var(--bg3)', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: 10, fontSize: 14, color: 'var(--white)', outline: 'none' }} type="tel" placeholder="7XX XXX XXX" value={phone} onChange={e => setPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && phone.length >= 7 && setStep('prompt')} />
-            </div>
-            <button onClick={() => phone.length >= 7 && setStep('prompt')} style={{ width: '100%', padding: '13px', background: phone.length < 7 ? 'rgba(245,166,35,0.35)' : 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: phone.length < 7 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <Smartphone size={16} /> Pay UGX {slip.slip_price.toLocaleString()} — unlock slip
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── SLIP CARD ─────────────────────────────────────────────────────
-function SlipCard({ slip, tipsterName, tipsterUsername, onBuy, showContent }: {
-  slip: Betslip; tipsterName: string; tipsterUsername: string; onBuy: () => void; showContent: boolean
-}) {
+function SlipCard({ row, unlocked, onBuy }: { row: Row; unlocked: boolean; onBuy: () => void }) {
+  const { slip, tipsterName, tipsterUsername } = row
   const router   = useRouter()
+  const [open, setOpen] = useState(false)
   const finished = slip.result === 'win' || slip.result === 'loss'
-  const canView  = finished || showContent
+  const canView  = finished || unlocked
   const risk     = getRiskLabel(slip.total_odds ?? 1)
-  const legCount = slip.legs?.length ?? slip.leg_count ?? 0
-  const initials = tipsterName.split(' ').map((w:string) => w[0]).join('').slice(0, 2).toUpperCase()
+  const games    = slip.game_count ?? slip.leg_count ?? 0
+  const leagues  = slip.leagues ?? []
+  const markets  = slip.markets ?? []
+  const initials = tipsterName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+  const isHot    = (slip.total_odds ?? 0) >= 10
 
   return (
-    <div style={{ background: 'var(--card)', borderRadius: 16, border: `1px solid ${(slip.total_odds ?? 0) >= 10 ? 'rgba(245,166,35,0.35)' : 'var(--line)'}`, borderLeft: (slip.total_odds ?? 0) >= 10 ? '3px solid var(--gold)' : undefined, marginBottom: 10, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--card)', borderRadius: 16, border: `1px solid ${isHot ? 'rgba(245,166,35,0.35)' : 'var(--line)'}`, borderLeft: isHot ? '3px solid var(--gold)' : undefined, marginBottom: 10, overflow: 'hidden' }}>
       <div style={{ padding: '12px 14px 10px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)' }}>Betslip</span>
-              <span style={{ background: 'var(--bg3)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20 }}>{legCount} legs</span>
+              <span style={{ background: 'var(--bg3)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20 }}>{games} games</span>
               <span style={{ background: risk.bg, color: risk.color, fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20, border: `1px solid ${risk.color}40` }}>{risk.label}</span>
-              {finished && <span style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20 }}>Free</span>}
-              {showContent && !finished && <span style={{ background: 'var(--green-lt)', color: 'var(--green)', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20, border: '1px solid rgba(46,204,122,0.3)' }}>Unlocked ✓</span>}
+              {finished
+                ? <span style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20 }}>Free</span>
+                : unlocked
+                  ? <span style={{ background: 'var(--green-lt)', color: 'var(--green)', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20, border: '1px solid rgba(46,204,122,0.3)' }}>Unlocked ✓</span>
+                  : <span style={{ background: 'var(--green-lt)', color: 'var(--green)', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20, border: '1px solid rgba(46,204,122,0.3)' }}>✓ Verified</span>}
             </div>
             <div onClick={() => router.push(`/channel/${tipsterUsername}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--bg3)', borderRadius: 8, padding: '5px 9px', cursor: 'pointer', border: '1px solid var(--line)' }}>
               <div style={{ width: 18, height: 18, borderRadius: 5, background: 'var(--bg2)', color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 800 }}>{initials}</div>
@@ -184,31 +50,24 @@ function SlipCard({ slip, tipsterName, tipsterUsername, onBuy, showContent }: {
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--gold)', lineHeight: 1 }}>{(slip.total_odds ?? 0).toFixed(2)}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--gold)', lineHeight: 1 }}>{(slip.total_odds ?? 0).toFixed(2)}</div>
             <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2, fontWeight: 600 }}>total odds</div>
           </div>
         </div>
-        {finished && (
-          <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: '8px 12px', fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ color: slip.result === 'win' ? 'var(--green)' : 'var(--red)', fontSize: 14 }}>{slip.result === 'win' ? '✓' : '✗'}</span>
-            Finished · Free to view
+        {(leagues.length > 0 || markets.length > 0) && (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {leagues.slice(0, 3).map((l, i) => <Chip key={'l' + i}>{l}</Chip>)}
+            {markets.slice(0, 3).map((m, i) => <Chip key={'m' + i}>{m}</Chip>)}
           </div>
         )}
       </div>
       <div style={{ padding: '10px 14px 12px', borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {finished ? (
+        {canView ? (
           <>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: slip.result === 'win' ? 'var(--green-lt)' : 'var(--red-lt)', color: slip.result === 'win' ? 'var(--green)' : 'var(--red)', border: `1px solid ${slip.result === 'win' ? 'rgba(46,204,122,0.3)' : 'rgba(255,107,107,0.3)'}` }}>
-              {slip.result === 'win' ? 'Won ✓' : 'Lost'}
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Tap to view below ↓</span>
-          </>
-        ) : showContent ? (
-          <>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: 'var(--green-lt)', color: 'var(--green)', border: '1px solid rgba(46,204,122,0.3)', display: 'flex', alignItems: 'center', gap: 5 }}>
-              <CheckCircle size={12} /> Slip unlocked
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>Content below ↓</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>{finished ? 'Free to view' : 'Unlocked ✓'}</span>
+            <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--bg3)', color: 'var(--offwhite)', border: '1px solid var(--line)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              {open ? <>Hide <ChevronUp size={13} /></> : <>View slip <ChevronDown size={13} /></>}
+            </button>
           </>
         ) : (
           <>
@@ -216,53 +75,44 @@ function SlipCard({ slip, tipsterName, tipsterUsername, onBuy, showContent }: {
               <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>One-time purchase</div>
               <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--white)' }}>UGX {slip.slip_price.toLocaleString()}</div>
             </div>
-            <button onClick={onBuy} style={{ background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 11, padding: '10px 18px', fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              Buy slip →
-            </button>
+            <button onClick={onBuy} style={{ background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 11, padding: '10px 18px', fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>Buy slip →</button>
           </>
         )}
       </div>
-      {canView && <SlipContent slip={slip} tipsterUsername={tipsterUsername} router={router} />}
+      {canView && open && <SlipReveal betslipId={slip.id} />}
     </div>
   )
 }
 
-// ── MAIN PAGE ─────────────────────────────────────────────────────
 export default function SlipsPage() {
-  const [filter,      setFilter]      = useState('All')
-  const [query,       setQuery]       = useState('')
-  const [focused,     setFocused]     = useState(false)
-  const [loading,     setLoading]     = useState(true)
-  const [allSlips,    setAllSlips]    = useState<{ slip: Betslip; tipsterName: string; tipsterUsername: string }[]>([])
-  const [buying,      setBuying]      = useState<{ slip: Betslip; tipsterName: string; tipsterUsername: string } | null>(null)
-  const [unlockedIds, setUnlockedIds] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
-    const keys = Object.keys(localStorage).filter(k => k.startsWith('bf_slip_'))
-    return new Set(keys.map(k => k.replace('bf_slip_', '')))
-  })
+  const [filter, setFilter]   = useState('All')
+  const [query, setQuery]     = useState('')
+  const [focused, setFocused] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [allSlips, setAllSlips] = useState<Row[]>([])
+  const [buying, setBuying]   = useState<Row | null>(null)
+  const [unlocked, setUnlocked] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    fetch('/api/slips')
-      .then(r => r.json())
-      .then(data => { setAllSlips(data.slips ?? []); setLoading(false) })
-      .catch(() => setLoading(false))
+    fetch('/api/slips').then(r => r.json()).then(d => { setAllSlips(d.slips ?? []); setLoading(false) }).catch(() => setLoading(false))
+    // Pre-load the logged-in buyer's purchases so an already-owned slip shows
+    // as Unlocked on ANY device — not just the browser where it was bought.
+    fetch('/api/subscribe', { headers: buyerHeader() }).then(r => r.json()).then(d => {
+      const owned: string[] = (d.subscriptions ?? []).filter((p: any) => p.status === 'active').map((p: any) => p.betslip_id)
+      if (owned.length) setUnlocked(prev => { const next = new Set(prev); owned.forEach(id => next.add(id)); return next })
+    }).catch(() => {})
   }, [])
 
   const oddsFilter = getOddsFilter(filter)
   const oddsQuery  = parseOddsQuery(query)
-  const filtered   = allSlips.filter(({ slip, tipsterName }) => {
+  const filtered = allSlips.filter(({ slip, tipsterName }) => {
     if (oddsQuery) return (slip.total_odds ?? 0) >= oddsQuery.min && (slip.total_odds ?? 0) <= oddsQuery.max + 0.99
-    if (filter !== 'All') { if ((slip.total_odds ?? 0) < oddsFilter.min || (slip.total_odds ?? 0) > oddsFilter.max) return false }
+    if (filter !== 'All' && ((slip.total_odds ?? 0) < oddsFilter.min || (slip.total_odds ?? 0) > oddsFilter.max)) return false
     if (query.trim() && !oddsQuery) { const q = query.toLowerCase(); return tipsterName.toLowerCase().includes(q) || (slip.total_odds ?? 0).toString().includes(q) }
     return true
   })
 
   const liveCount = allSlips.filter(s => s.slip.result === 'pending').length
-
-  function handleModalClose(unlocked: boolean, slipId: string) {
-    if (unlocked) setUnlockedIds(prev => { const s = new Set(prev); s.add(slipId); return s })
-    setBuying(null)
-  }
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -271,7 +121,7 @@ export default function SlipsPage() {
         <div style={{ background: 'var(--bg2)', padding: '12px 16px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>Marketplace</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--white)' }}>All slips</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--white)' }}>Verified slips</div>
           </div>
           <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 10, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'var(--gold)' }}>{liveCount} live</div>
         </div>
@@ -290,46 +140,32 @@ export default function SlipsPage() {
           </div>
 
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-              <Loader2 size={28} color="var(--gold)" style={{ margin: '0 auto', display: 'block', animation: 'slipspin 1s linear infinite' }} />
-            </div>
+            <div style={{ textAlign: 'center', padding: '40px 0' }}><Loader2 size={28} color="var(--gold)" className="spin" /></div>
           ) : (
             <>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
-                {filtered.length} slip{filtered.length !== 1 ? 's' : ''}
-              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>{filtered.length} slip{filtered.length !== 1 ? 's' : ''}</div>
               {filtered.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>
                   <Ticket size={32} style={{ margin: '0 auto 10px', display: 'block', opacity: 0.4 }} />
                   <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--offwhite)', marginBottom: 4 }}>No slips found</div>
                   <div style={{ fontSize: 12 }}>Try a different odds range</div>
                 </div>
-              ) : filtered.map(({ slip, tipsterName, tipsterUsername }) => (
-                <SlipCard
-                  key={slip.id}
-                  slip={slip}
-                  tipsterName={tipsterName}
-                  tipsterUsername={tipsterUsername}
-                  showContent={unlockedIds.has(slip.id)}
-                  onBuy={() => setBuying({ slip, tipsterName, tipsterUsername })}
-                />
-              ))}
+              ) : filtered.map(row => <SlipCard key={row.slip.id} row={row} unlocked={unlocked.has(row.slip.id)} onBuy={() => setBuying(row)} />)}
             </>
           )}
         </div>
       </main>
-
       <BottomNav />
 
-      {buying && (
-        <BuyModal
-          slip={buying.slip}
-          tipsterName={buying.tipsterName}
-          onClose={(unlocked) => handleModalClose(unlocked, buying.slip.id)}
-        />
-      )}
-
-      <style>{`@keyframes slipspin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
+      <PaymentSheet
+        open={!!buying}
+        amount={buying?.slip.slip_price ?? 0}
+        betslipId={buying?.slip.id ?? ''}
+        tipsterName={buying?.tipsterName}
+        slipLabel={buying ? `${buying.slip.game_count ?? buying.slip.leg_count ?? ''} games · odds ${(buying.slip.total_odds ?? 0).toFixed(2)}` : undefined}
+        onDone={(r) => { if (buying && r.status === 'success') setUnlocked(prev => new Set(prev).add(buying.slip.id)); setBuying(null) }}
+        onClose={() => setBuying(null)}
+      />
     </div>
   )
 }

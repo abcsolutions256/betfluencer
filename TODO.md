@@ -1,0 +1,98 @@
+# TODO — Betfluencer
+
+System overview: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Detail + file:line: [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md). ioTec flow: [`docs/PAYMENTS-IOTEC.md`](docs/PAYMENTS-IOTEC.md).
+
+## 🔴 Current open items (2026-06-25)
+- [ ] **P0 — Tipster login broken for legacy tipsters.** Existing `tipsters` rows have `profile_id = NULL` + old `password_hash`, never migrated to Supabase Auth → `getMyTipster()` returns null → `/api/tipster/me` 401 "Not a tipster" → dashboard bounces to login (redirect loop). Fix: (a) **link-on-signup** — `/api/tipster/register` adopts an existing tipster matched by email/phone (set `profile_id`) instead of creating a duplicate; (b) **backfill** existing rows (create/link a Supabase auth user per tipster; old passwords can't carry over → reset). New signups already work.
+- [x] **`/tipster` index routes via the real session** (2026-06-25) — was using the dead `bf_tipster` localStorage flag (always → signup); now server-redirects to dashboard (linked tipster) / login.
+- [ ] **Apply migrations 0006–0010 to the live DB** (0006 normalized verify, 0007 hidden flag, 0008/0009 buyer_key, 0010 skip-verified sync + `verify_attempts`). Until 0010 lands, `sync-codes` + `record_failed_verify` RPC error out (sync silently no-ops).
+- [ ] **Bet worker** confirmed working (22Bet `found=true` + Gemini normalize; runs from local/residential IP — cloud IP blocked, so prod `SYNC_CODES_ENABLED=false`, run the worker locally). Optional: shorten the 1xBet `navigatesOnSubmit` timeout (~53s) for snappier invalid-code failures.
+- [x] **Playwright e2e merge gate** (2026-06-25) — `npm run test:e2e`, 7 specs green (local Supabase + ioTec demo). Caught + fixed a real stale-feed cache bug (`supabaseServer()` now `cache:'no-store'` + `/api/slips` `Cache-Control: no-store`). Gap: no spec covers the legacy-tipster login case — add once the P0 fix lands.
+- [x] **Redis-queue rearchitecture reverted** — built (cloud app+redis+sync, local worker consuming a stream, `/api/slips/verify-callback`) then reverted as too complex. Current model = direct worker call. Don't reintroduce without re-asking.
+
+## 🔭 OVERHAUL (in progress, 2026-06-12)
+Decisions: **Supabase Auth** (email+password) · pre-pay **proof only** (no picks) · commission **global default + per-tipster override** · payout **instant per sale**. Paywall = the booking code lives in a separate service-role-only `betslip_codes` table (never a column on `betslips`); only the authenticated, purchase-checked API returns it.
+
+- [x] **Phase 1 — Foundation** — migration `20260612120000_auth_paywall_overhaul.sql` (profiles+role, `betslip_codes` secret table, betslips `verification_status`+proof cols, `slip_purchases.buyer_id`, per-tipster `commission_rate`, RLS keyed on `auth.uid()`); `@supabase/ssr` + session/role helpers (`src/lib/supabase/{server,client}.ts`, `src/lib/auth/session.ts`) + `src/middleware.ts`.
+- [x] **Phase 2 — Auth pages/flows** (done) — `/signup` (buyer) · `/login` · `/tipster/{signup,login}` on Supabase email+pw; `/api/tipster/register` (role→tipster + tipsters row); `/api/tipster/me` + dashboard via session; `/api/auth/logout`; **admin → `requireRole('admin')`** across all admin routes (forgeable `base64("admin:")` token retired). Left for Phase 7: session-aware nav account button; delete dead `adminAuth.ts` + `api/admin/login`.
+- [x] **Phase 3 — Verify workflow** — post coded slip → code into `betslip_codes` → worker verify → on `found`, set `verification_status='verified'` + write proof (game_count, leagues, markets, odds, kickoff); admin override/reject.
+- [x] **Phase 4 — Marketplace + bulletproof paywall** — list only verified slips; reads return **proof only**; gated `GET /api/slips/[id]/reveal` checks an active purchase for `auth.uid()` → returns the secret (`betslip_secrets`: code+site or screenshot, + `betslip_legs` picks + `slip_verifications` matches); else proof. A slip can be bought by many users (unique purchase per (slip,buyer)).
+- [x] **Phase 5 — Purchase tied to account** — `initiate` sets `slip_purchases.buyer_id = auth.uid()`; "my purchases" cross-device; PaymentSheet requires login.
+- [x] **Phase 6 — Commission in admin** — edit global `platform_commission` + per-tipster `commission_rate`; fulfillment uses effective rate (instant payout kept).
+- [x] **Phase 7 — Cleanup** — deleted `adminAuth.ts`, `api/admin/login`, `entitlement.ts`, `api/tipster/auth`; all admin routes on `requireRole('admin')`; build green.
+
+### Overhaul — remaining polish
+- [x] `/slips` + `/mine` rewired to proof+reveal / session (shared `SlipReveal` component).
+- [x] Nav account / login / logout button.
+- [x] Admin **global commission** input.
+- [ ] Admin **per-tipster commission** input + a "verify/reject slip" button (APIs exist: `admin/tipsters` PATCH `commission_rate`, `/api/admin/verify-slip`).
+- [ ] Tipster dashboard: show own pending/verified status + reveal own codes via `/api/slips/[id]/reveal`; wire screenshot-mode posting to send `slip_image_url`.
+- [ ] Admin-created tipsters (the password form) have no Supabase login — retire that form or have it invite-create an auth user. Tipsters should self-signup at `/tipster/signup`.
+- [ ] **Apply migration `0005` to Supabase + turn off email confirmation** before testing; set your own `profiles.role='admin'`.
+
+## Recently landed (2026-06-10 → 06-12)
+- [x] ioTec payments end-to-end (initiate → webhook/status → fulfill); `<PaymentSheet>` + `usePayment` + `BuySlipButton`; `transactions` ledger + admin tab.
+- [x] Server-side paid-content gating (`entitlement.ts`) + RLS lockdown (migration `0003`).
+- [x] Bet-code worker (Puppeteer, 5 bookies HTML-confirmed, debug screenshots) + auto-verify on post + `sync` poller (`verifyCode.ts`, `slip_verifications` table).
+- [x] Full-stack `docker-compose.yml` (web + worker + sync); Next standalone image (node 24).
+- [x] Build/deploy fixes: `force-dynamic` on DB API routes (Docker build), pinned web `PORT=3000` (compose).
+
+---
+
+## P0 — launch blockers (payments must work + not lose money)
+
+### Payments (the actual job) — DONE 2026-06-10 (real ioTec Pay)
+- [x] **Disburse to the tipster** — `fulfillTransaction` pays `tipster.phone` (90%), fetched from the DB. Money bug fixed.
+- [x] **Async flow** — `initiate` (collect) → `webhooks/iotec` / `status` poll (confirm) → `fulfillTransaction` (unlock + payout). No disburse before confirmation.
+- [x] **Ledger rows** — `transactions` table tracks every collection + payout; pending `slip_purchases` created on initiate, flipped to `active` on success.
+- [x] **DB-driven** — real slip price + tipster + phone from Postgres; no mock in the payment path.
+- [x] **Buy UI** — `<PaymentSheet>` (bottom sheet, MoMo + Card) + `usePayment()` hook + `<BuySlipButton>`, wired into `BetslipFeed` and `slips`. Card returns to `/pay/return`.
+- [x] **Webhook** — at `api/webhooks/iotec`; security-header check + **status refetch** (never trusts the payload); idempotent via `slip_purchases.status`.
+- [x] **Reconcile / status poll** — `GET /api/payments/status` refetches from ioTec and fulfils on success, covering missed webhooks.
+- [x] **Unlock check on read** (2026-06-10) — `/api/slips` + `/api/tipster/[slug]/slips` strip `booking_code`/`betting_site`/`slip_image_url`/`note` for pending slips unless `?buyer=` (phone/email) has an `active` purchase (`src/lib/entitlement.ts`). Client sends the paid identity (`bf_phone`) + refetches on unlock. *(Follow-up: tipster owner-view of own codes needs real tipster sessions.)*
+- [ ] Apply `supabase/migrations/0002_transactions.sql` to the live DB + set `IOTEC_*` env before going live (works in **demo mode** now).
+- [ ] Confirm ioTec's real callback header name + payload field names against the portal/docs.
+
+### Security (don't ship these)
+- [ ] **Admin auth is forgeable** — `base64("admin:…")` passes. Sign the token (HMAC with a server secret) or use a real session. Remove the hardcoded default password from `adminAuth.ts`. *(still open)*
+- [x] **Webhook signature** — `webhooks/iotec` rejects when the callback security header doesn't match `IOTEC_WEBHOOK_SECRET` (skips only in demo) and re-verifies by refetching status.
+- [x] **Webhook idempotency** — re-delivery is a no-op once `slip_purchases.status` is `active`.
+- [x] **RLS hardened — paid-only code access** (2026-06-10, migration `0003` + `rls.sql`): anon can read only finished slips/legs; pending booking codes, purchases, financials, and `tipsters` (password_hash) are service-role-only; anon can't forge an `active` purchase. **Apply `0003` to the live DB.**
+- [ ] **Buyer identity is unauthenticated** — the API trusts `?buyer=<phone|email>`. Someone who knows a paying buyer's phone could fetch their unlocked code. Full fix = buyer OTP/session.
+
+### Schema ↔ code mismatch (causes silent failures)
+- [x] **`tipster_stats` fixed** (2026-06-10) — wrong name for the `tipster_rankings` view; repointed `api/tipster` + `api/tipster/[slug]/stats`.
+- [x] **Removed dead `subscriptions` + `tips` queries** from `db.ts` (per-slip model); `api/subscribe` GET now reads real `slip_purchases`.
+- [x] **Schema synced to live DB** — added `betslips.betting_site`/`booking_code` + `platform_settings`, widened `posting_mode` check, nullable odds/legs.
+- [ ] Confirm `payments`/`earnings` column names stay locked (earnings now uses `commission`, matches live).
+
+---
+
+## P1 — Supabase: models, migrations, auth (the explicit ask)
+- [x] **Supabase CLI migrations adopted** (2026-06-10) — `supabase/config.toml` + `migrations/20260610000001_init.sql` + `..0002_transactions.sql`; npm scripts `db:push`/`db:new`/`db:reset`/`migrate`; see `supabase/README.md`. (Live DB: apply `0002` once — instructions in the README.)
+- [ ] **Decide the auth model.** Today it's a hand-rolled phone+password with **three** competing hash schemes (SHA-256 in `auth.ts`, pgcrypto bcrypt in the seed, `bcryptjs` dep). Pick one:
+  - Option A (fast): keep custom auth, standardise on `bcryptjs`, fix the seed, add real signed sessions (cookie/JWT) instead of returning bare `{id,name}`.
+  - Option B (cleaner): move tipsters to **Supabase Auth** (phone OTP) and turn RLS on properly.
+- [ ] **Real RLS.** Current policies are all `using(true)` = open; the only thing protecting data is that writes go through the service role. If the anon key ever touches a sensitive table, it's exposed. Tighten once auth model is set.
+- [ ] **Fix `supabaseServer()`** — it hardcodes the project URL; read it from env so staging/prod don't cross wires.
+
+## P1 — correctness / data
+- [ ] `api/verify` calls `supabaseServer()` with no null guard — will throw if env missing. Guard it like `db.ts` does.
+- [ ] Confirm the auto-tick trigger + `tipster_rankings` score logic against real data (wins×avg_odds can rank a 1-slip fluke above a steady tipster).
+
+## P2 — cleanup / polish
+- [x] **Removed Flutterwave + Africa's Talking remnants** (2026-06-10): pruned `flutterwave-node-v3`, `africastalking` + 5 other unused deps (`axios`, `bcryptjs`, `clsx`, `postgres`, `@supabase/ssr`); deleted `.d.ts` shims + unused `TipFeed.tsx` + dead `verifyIotecWebhook`; renamed webhook route `flutterwave`→`iotec`. *(Left: rename `payments.flw_ref`→`provider_ref` — needs a migration.)*
+- [x] **Rewrote `README.md` + `.env.local.example`** to ioTec reality.
+- [x] **Cleaned the junk files** from the index (`a`, `r.id`, `s.result`, `p.user_phone)).size`, `since28)`).
+- [ ] **Implement `sendSMS`** (slip-unlocked + refund templates already exist) via Africa's Talking or ioTec messaging.
+- [ ] Add a secret-free `.env.example` and confirm `.env` is gitignored (check it isn't tracked).
+
+## Backlog (separate quote / later)
+- [x] **Bet-code verification worker built** (2026-06-10) — `bet-code-worker/` (Dockerized Puppeteer scraper API, debug screenshots) + `POST /api/slips/verify-code` (admin) + `slip_verifications` table (migration `0004`, incl. `found`/`screenshot_url`).
+  - [x] **Real selectors confirmed from HTML** for 5 UG bookies: 1xBet, 22Bet, betPawa, SportPesa, MozzartBet (mined from Abdallah's `prompt.md` captures with codes loaded). `found` flag returns whether entering the code yielded selections. SportyBet/Betway still unverified placeholders.
+  - [ ] **Live-verify** the 5 adapters by running the worker against the real sites with the sample codes (needs a UG-capable host; anti-bot/geo). Watch `screenshot_url` + `found`.
+  - [x] **Auto-sync wired** (2026-06-12) — `/api/tips` fires verification on coded-slip post; `/api/slips/sync-codes` poller (token-gated) keeps pending coded slips fresh; shared helper `src/lib/verifyCode.ts` upserts one current row per betslip. Root `docker-compose.yml` runs web + worker + `sync` poller; web is a Next standalone image.
+  - [ ] Wire a "Verify code" button in admin + show verified matches on booking-code slips; per-bookie login if a site gates code-loading behind a session (22bet/1xbet may); respect bookie ToS.
+  - [ ] Screenshots are internal in compose (worker not published) — add a Next `/api/shots/[file]` proxy (or publish the worker) so admins can view `screenshot_url`. Apply migration `0004` to live.
+- [ ] Subscription expiry cron (only if a channel-subscription model is reintroduced — currently per-slip).
+- [ ] Kenya (M-Pesa) / Tanzania expansion.

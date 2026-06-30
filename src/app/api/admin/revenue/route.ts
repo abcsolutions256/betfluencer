@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { verifyAdminToken } from '@/lib/adminAuth'
+import { requireRole } from '@/lib/auth/session'
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdminToken(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const db = supabaseServer()
   if (!db) return NextResponse.json({ total: 0, commission: 0, purchases: 0, tipsters: [] })
 

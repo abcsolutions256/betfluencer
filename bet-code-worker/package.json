@@ -1,0 +1,16 @@
+{
+  "name": "bet-code-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless-Chrome worker: load a bookie booking code, scrape the selected matches, return them as JSON.",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": { "node": ">=24" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "puppeteer-core": "^23.10.4"
+  }
+}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTipsterByIdentifier, getTipsByTipster } from '@/lib/db'
+import { getTipsterByIdentifier } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -12,6 +12,7 @@ export async function GET(
   const tipster = await getTipsterByIdentifier(params.slug)
   if (!tipster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const tips = await getTipsByTipster(tipster.id)
-  return NextResponse.json({ tipster, tips })
+  // Slips are served by /api/tipster/[slug]/slips; the legacy `tips` table is dead
+  // in the merged schema (superseded by betslips), so it is no longer returned here.
+  return NextResponse.json({ tipster })
 }

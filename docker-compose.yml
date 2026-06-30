@@ -1,0 +1,132 @@
+# ── Betfluencer — DEVELOPMENT (hot reload) ────────────────────────
+# Source is bind-mounted; `web` runs `next dev` and the worker runs
+# `node --watch`, so edits on the host reload live. For production use
+# docker-compose.prod.yml.
+#
+#   docker compose up            # web → http://localhost:3000, worker → :8080
+#
+# node_modules + .next live in NAMED VOLUMES (not the host's) so the
+# container keeps its own linux binaries — avoids the macOS↔linux SWC
+# clash you'd get from mounting the host's node_modules.
+#
+# NOTE — if `web` boot-loops (prints "✓ Starting..." then exits code 0, no
+# error, repeatedly), the node_modules volume holds a stale/incompatible
+# native SWC binary from an older image/arch. `npm install` sees it as
+# "up to date" and never replaces it, so `next dev` crashes (SIGBUS) loading
+# SWC and the restart policy hides it. Recreate the volumes:
+#       docker compose down -v && docker compose up
+# Do this whenever you change the base image or host architecture.
+#
+# Required in the root `.env` (read at runtime — no build args in dev):
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_APP_URL,
+#   SUPABASE_SERVICE_ROLE_KEY, IOTEC_*, ANTHROPIC_API_KEY, ADMIN_PASSWORD,
+#   BET_CODE_WORKER_KEY, SYNC_TOKEN.
+
+name: betfluencer-dev
+
+services:
+  web:
+    image: node:24-bookworm-slim
+    working_dir: /app
+    # Install into the named-volume node_modules on first run, then `next dev`.
+    command: sh -c "npm install && npm run dev -- -H 0.0.0.0 -p 3000"
+    env_file: .env
+    environment:
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      NODE_ENV: development
+      # Reliable file-watching through Docker bind mounts (needed on macOS).
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      # Reach the worker over the compose network (overrides any .env value).
+      BET_CODE_WORKER_URL: http://bet-code-worker:8080
+      BET_CODE_WORKER_KEY: ${BET_CODE_WORKER_KEY}
+      SYNC_TOKEN: ${SYNC_TOKEN}
+      SYNC_BATCH: ${SYNC_BATCH:-20}
+      # Stop re-scraping a 'failed' code after this many attempts (verified
+      # slips are never re-scraped — their selections are immutable).
+      SYNC_MAX_FAILED_RETRIES: ${SYNC_MAX_FAILED_RETRIES:-5}
+      # Local stack runs the bookie code-sync (residential IP isn't blocked).
+      SYNC_CODES_ENABLED: ${SYNC_CODES_ENABLED:-true}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app                       # live source
+      - web_node_modules:/app/node_modules   # container's own (linux) deps
+      - web_next:/app/.next                  # dev build cache
+      # Mask heavy/irrelevant trees so they're neither mounted into the
+      # container nor hit by the file-watch poller (.dockerignore does NOT
+      # apply to bind mounts). Keeps src/public hot-reload fast on Apple Silicon.
+      - /app/.git
+      - /app/bet-code-worker
+      - /app/screenshots
+      - /app/docs
+    depends_on:
+      - bet-code-worker
+    # Liveness probe so `sync` waits for a real "Ready", not a fixed sleep.
+    # Generous start_period covers the cold `npm install` on first boot.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+    restart: unless-stopped
+
+  bet-code-worker:
+    build:
+      context: ./bet-code-worker      # built for chromium + deps
+      dockerfile: Dockerfile
+    command: node --watch src/server.js
+    env_file: .env
+    environment:
+      WORKER_API_KEY: ${BET_CODE_WORKER_KEY}
+      PORT: "8080"
+      MAX_CONCURRENT: ${WORKER_MAX_CONCURRENT:-2}
+      SCREENSHOT_TTL_HOURS: ${SCREENSHOT_TTL_HOURS:-48}
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      # Gemini response normalisation. GEMINI_API_KEY comes from .env via
+      # env_file above; unset it to disable normalisation entirely.
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite}
+    volumes:
+      - ./bet-code-worker/src:/app/src       # hot-reload the scraper source
+      - screenshots:/app/screenshots
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  sync:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      web:
+        condition: service_healthy   # wait for web's real readiness, not a sleep
+    environment:
+      SYNC_TOKEN: ${SYNC_TOKEN}
+      SYNC_INTERVAL: ${SYNC_INTERVAL:-300}
+      # Auto-settle finished slips less often than codes/reconcile — the
+      # football API free tier is 100 requests/day. Default 6h (~4 runs/day).
+      VERIFY_INTERVAL: ${VERIFY_INTERVAL:-21600}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "sync: web healthy — codes+reconcile every $${SYNC_INTERVAL:-300}s, settle every $${VERIFY_INTERVAL:-21600}s";
+        last_verify=0;
+        while true; do
+          curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/slips/sync-codes \
+            && echo "" || echo "sync: codes unreachable, will retry";
+          curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/payments/reconcile \
+            && echo "" || echo "sync: reconcile unreachable, will retry";
+          now=$$(date +%s);
+          if [ $$((now - last_verify)) -ge $${VERIFY_INTERVAL:-21600} ]; then
+            curl -fsS -X POST -H "x-sync-token: $$SYNC_TOKEN" http://web:3000/api/verify \
+              && echo "" || echo "sync: verify unreachable, will retry";
+            last_verify=$$now;
+          fi;
+          sleep "$${SYNC_INTERVAL:-300}";
+        done
+    restart: unless-stopped
+
+volumes:
+  web_node_modules:
+  web_next:
+  screenshots:

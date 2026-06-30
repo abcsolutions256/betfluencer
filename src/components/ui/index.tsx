@@ -13,8 +13,9 @@ export function VerifiedTick({ tickType }: { tickType: 'earned' | 'paid' | null 
   )
 }
 
+// Shows total slips won out of total SETTLED slips (won + lost), e.g. 26/40.
 export function WinRate({ wins, outOf = 10 }: { wins: number; outOf?: number }) {
-  const pct = (wins / outOf) * 100
+  const pct = outOf > 0 ? (wins / outOf) * 100 : 0
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
@@ -66,7 +67,7 @@ export function TipsterCard({ tipster, rank }: { tipster: TipsterPublic; rank: n
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 mb-3">
-        <div className="sbox"><WinRate wins={tipster.wins_last_10 ?? 0} /></div>
+        <div className="sbox"><WinRate wins={tipster.wins_last_10 ?? 0} outOf={(tipster.wins_last_10 ?? 0) + (tipster.losses ?? 0)} /></div>
         <div className="sbox">
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--gold)' }}>{(tipster.avg_odds ?? 0).toFixed(1)}x</div>
           <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3, fontWeight: 600 }}>avg odds</div>

@@ -4,11 +4,19 @@ import { useRouter } from 'next/navigation'
 import { Loader2, Plus, Send, Wallet, BarChart2, User, Home, Trash2 } from 'lucide-react'
 import { ResultPill } from '@/components/ui'
 import { ImageUpload } from '@/components/ui/ImageUpload'
-import { supabaseBrowser } from '@/lib/supabase'
 import type { Tipster } from '@/types'
 import type { SlipLeg } from '@/types/betslip'
+import { BETTING_SITES } from '@/lib/bettingSites'
 
 type DTab = 'home'|'post'|'myslips'|'earn'|'stats'|'profile'
+
+// Verification-status badge styling (booking-code slips).
+const VERIF: Record<string, { label: string; color: string; bg: string }> = {
+  verified: { label: '✓ Verified',   color: 'var(--green)', bg: 'var(--green-lt)' },
+  pending:  { label: '⏳ Verifying…', color: 'var(--gold)',  bg: 'var(--gold-lt)' },
+  failed:   { label: '✗ Unverified',  color: 'var(--red)',   bg: 'rgba(229,72,77,0.12)' },
+  rejected: { label: '✗ Rejected',    color: 'var(--red)',   bg: 'rgba(229,72,77,0.12)' },
+}
 
 type Stats = {
   subscriber_count: number
@@ -29,6 +37,7 @@ type Betslip = {
   posted_at: string
   booking_code: string
   betting_site: string
+  locked?: boolean
 }
 
 type Earning = {
@@ -108,17 +117,16 @@ export default function TipsterDashboard() {
     }
   }
 
-  async function uploadSlipImage(file: File, tipsterId: string): Promise<string | null> {
+  async function uploadSlipImage(file: File, _tipsterId: string): Promise<string | null> {
     try {
-      const db = supabaseBrowser()
-      const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `${tipsterId}/${Date.now()}.${ext}`
-      const { error } = await db.storage
-        .from('betslips')
-        .upload(path, file, { contentType: file.type, upsert: false })
-      if (error) { console.error('Image upload error:', error); return null }
-      const { data } = db.storage.from('betslips').getPublicUrl(path)
-      return data.publicUrl
+      // Server-side upload (service role) so it doesn't depend on a Supabase
+      // Auth session — auth is now phone-identity cookies.
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/tipster/upload', { method: 'POST', body: fd })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { console.error('Image upload error:', d?.error); return null }
+      return d.url ?? null
     } catch (e) {
       console.error('uploadSlipImage error:', e)
       return null
@@ -134,12 +142,15 @@ export default function TipsterDashboard() {
   function removeSlip(si: number) { setSlips(s => s.filter((_, i) => i !== si)) }
 
   useEffect(() => {
-    const id = localStorage.getItem('bf_tipster_id')
-    if (!id) { router.push('/tipster/login'); return }
-    fetch(`/api/tipster/${id}`).then(r => r.json()).then(d => { setTipster(d.tipster) })
-    fetch(`/api/tipster/${id}/stats`).then(r => r.json()).then(d => { if (d.stats) setStats(d.stats) })
-    fetch(`/api/tipster/${id}/slips`).then(r => r.json()).then(d => { if (d.slips) setBetslips(d.slips) })
-    fetch(`/api/tipster/${id}/earnings`).then(r => r.json()).then(d => { if (d.earnings) setEarnings(d.earnings) })
+    // Resolve the logged-in tipster from the session cookie.
+    fetch('/api/tipster/me').then(r => r.ok ? r.json() : null).then(d => {
+      if (!d?.tipster) { router.push('/tipster/login'); return }
+      const id = d.tipster.id
+      setTipster(d.tipster)
+      fetch(`/api/tipster/${id}/stats`).then(r => r.json()).then(d => { if (d.stats) setStats(d.stats) })
+      fetch(`/api/tipster/${id}/slips`).then(r => r.json()).then(d => { if (d.slips) setBetslips(d.slips) })
+      fetch(`/api/tipster/${id}/earnings`).then(r => r.json()).then(d => { if (d.earnings) setEarnings(d.earnings) })
+    })
   }, [router])
 
   async function postTip() {
@@ -151,9 +162,19 @@ export default function TipsterDashboard() {
 
     if (postMode === 'screenshot') {
       for (const ss of screenshotSlips) {
-        let slip_image_url: string | null = null
-        if (ss.slipFile) {
-          slip_image_url = await uploadSlipImage(ss.slipFile, tipster.id)
+        // A screenshot slip MUST carry its image — that's the product the buyer
+        // unlocks. Require the file and fail loudly if the upload doesn't return
+        // a URL, rather than silently posting an imageless slip.
+        if (!ss.slipFile) {
+          setPostError('Please attach a screenshot for each slip before posting.')
+          setPosting(false)
+          return
+        }
+        const slip_image_url = await uploadSlipImage(ss.slipFile, tipster.id)
+        if (!slip_image_url) {
+          setPostError('Screenshot upload failed. Please check your connection and try again.')
+          setPosting(false)
+          return
         }
         slipsToPost.push({
           posting_mode:  'screenshot',
@@ -232,6 +253,7 @@ export default function TipsterDashboard() {
 
       <div className="flex-1 overflow-y-auto p-4 pb-8">
 
+        {/* HOME */}
         {tab === 'home' && (
           <>
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -256,10 +278,14 @@ export default function TipsterDashboard() {
                 <div className="flex justify-between items-center">
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)' }}>
-                      {b.betting_site || 'Betslip'} · {b.leg_count || 0} legs · ×{(b.total_odds || 0).toFixed(2)}
+                      {b.betting_site || (b.locked ? 'Slip' : 'Betslip')} · {b.leg_count || 0} legs · ×{(b.total_odds || 0).toFixed(2)}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                      {b.booking_code ? <>Code: <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{b.booking_code}</span> · </> : ''}
+                      {b.booking_code
+                        ? <>Code: <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{b.booking_code}</span> · </>
+                        : b.locked
+                          ? <>Code: <span style={{ color: 'var(--gold)', fontWeight: 700 }}>🔒 hidden until sold</span> · </>
+                          : ''}
                       UGX {(b.slip_price || 0).toLocaleString()}
                     </div>
                   </div>
@@ -270,6 +296,7 @@ export default function TipsterDashboard() {
           </>
         )}
 
+        {/* POST */}
         {tab === 'post' && (
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 4 }}>Post betslips</div>
@@ -361,7 +388,7 @@ export default function TipsterDashboard() {
                     </div>
                     <label className="lbl">Betting site</label>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
-                      {['BetPawa', 'Betway', 'SportPesa', 'Mozzart', '1xBet', 'Other'].map(site => (
+                      {BETTING_SITES.map(site => (
                         <button key={site} type="button" onClick={() => setSlips(s => s.map((sl, i) => i === si ? { ...sl, betting_site: site } : sl))} style={{ padding: '8px 4px', borderRadius: 10, border: slip.betting_site === site ? '2px solid var(--gold)' : '1px solid var(--line)', background: slip.betting_site === site ? 'var(--gold-lt)' : 'var(--bg3)', color: slip.betting_site === site ? 'var(--gold)' : 'var(--offwhite)', fontSize: 11, fontWeight: slip.betting_site === site ? 700 : 500, cursor: 'pointer' }}>{site}</button>
                       ))}
                     </div>
@@ -369,13 +396,16 @@ export default function TipsterDashboard() {
                     <input className="inp" style={{ fontSize: 18, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }} placeholder="e.g. ABC123" value={slip.booking_code || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, booking_code: e.target.value.toUpperCase() } : sl))} />
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       <div>
-                        <label className="lbl">Total odds</label>
-                        <input className="inp" type="number" step="0.01" placeholder="e.g. 12.40" value={slip.total_odds || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, total_odds: e.target.value } : sl))} />
+                        <label className="lbl">Total odds <span style={{ color: 'var(--muted)', fontWeight: 500 }}>(auto)</span></label>
+                        <input className="inp" type="number" step="0.01" placeholder="Auto from code" value={slip.total_odds || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, total_odds: e.target.value } : sl))} />
                       </div>
                       <div>
-                        <label className="lbl">No. of legs</label>
-                        <input className="inp" type="number" placeholder="e.g. 4" value={slip.leg_count || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, leg_count: e.target.value } : sl))} />
+                        <label className="lbl">No. of legs <span style={{ color: 'var(--muted)', fontWeight: 500 }}>(auto)</span></label>
+                        <input className="inp" type="number" placeholder="Auto from code" value={slip.leg_count || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, leg_count: e.target.value } : sl))} />
                       </div>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+                      Odds &amp; legs are read from the booking code automatically — leave blank.
                     </div>
                     <label className="lbl" style={{ marginTop: 8 }}>Note (optional)</label>
                     <input className="inp" value={slip.note || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, note: e.target.value } : sl))} />
@@ -392,30 +422,53 @@ export default function TipsterDashboard() {
           </div>
         )}
 
+        {/* MY SLIPS */}
         {tab === 'myslips' && (
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 14 }}>My slips</div>
             {betslips.length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '40px 0' }}>No slips posted yet</div>}
-            {betslips.map(b => (
-              <div key={b.id} className="card" style={{ marginBottom: 8, borderLeft: `3px solid ${b.result === 'win' ? 'var(--green)' : b.result === 'loss' ? 'var(--red)' : 'var(--line)'}` }}>
-                <div className="flex justify-between items-center">
+            {betslips.map((b: any) => {
+              const norm: any[] = Array.isArray(b.normalized) ? b.normalized : []
+              const v = VERIF[b.verification_status as string] || VERIF.pending
+              const fmtKO = (iso?: string) => iso ? new Date(iso).toLocaleString('en-UG', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : ''
+              return (
+              <div key={b.id} className="card" style={{ marginBottom:8, borderLeft:`3px solid ${b.result==='win'?'var(--green)':b.result==='loss'?'var(--red)':'var(--line)'}` }}>
+                <div className="flex justify-between items-center" style={{ marginBottom: norm.length ? 10 : 0 }}>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)' }}>
-                      {b.betting_site || 'Betslip'} · {b.leg_count || 0} legs · ×{(b.total_odds || 0).toFixed(2)}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                      {b.booking_code ? <>Code: <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{b.booking_code}</span> · </> : ''}
-                      UGX {(b.slip_price || 0).toLocaleString()}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{b.posted_at ? new Date(b.posted_at).toLocaleDateString() : ''}</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site || 'Slip'} · {b.leg_count ?? b.game_count ?? norm.length} legs · ×{b.total_odds ?? '—'}</div>
+                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700, letterSpacing:1 }}>{b.booking_code || '—'}</span> · UGX {(b.slip_price||0).toLocaleString()}</div>
+                    <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>{b.posted_at ? new Date(b.posted_at).toLocaleDateString() : ''}</div>
                   </div>
-                  <ResultPill result={b.result as any} />
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5 }}>
+                    {b.posting_mode === 'booking_code' && <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, color:v.color, background:v.bg, whiteSpace:'nowrap' }}>{v.label}</span>}
+                    {b.hidden && <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, color:'var(--red)', background:'rgba(229,72,77,0.12)', whiteSpace:'nowrap' }}>Hidden by admin</span>}
+                    <ResultPill result={b.result as any} />
+                  </div>
                 </div>
+                {/* Owner-only: the verified picks (markets, teams, 1/X/2, kickoff). */}
+                {norm.length > 0 && (
+                  <div style={{ borderTop:'1px solid var(--line)', paddingTop:8, display:'flex', flexDirection:'column', gap:7 }}>
+                    {norm.map((leg, i) => (
+                      <div key={i} style={{ fontSize:11.5, lineHeight:1.45 }}>
+                        <div style={{ color:'var(--white)', fontWeight:700 }}>{leg.teams || `${leg.homeTeam ?? '?'} vs ${leg.awayTeam ?? '?'}`}</div>
+                        <div style={{ color:'var(--muted)' }}>
+                          <span style={{ color:'var(--gold)', fontWeight:700 }}>{leg.marketLabel || leg.market || '—'}</span>
+                          {' · pick '}<span style={{ color:'var(--green)', fontWeight:800 }}>{leg.pickSymbol ?? '—'}</span>
+                          {leg.pickTeam ? ` (${leg.pickTeam})` : ''}
+                          {leg.odds ? ` · @${leg.odds}` : ''}
+                          {leg.kickoff ? ` · ${fmtKO(leg.kickoff)}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                    {b.slip_summary && <div style={{ fontSize:10.5, color:'var(--muted)', fontStyle:'italic', marginTop:1 }}>{b.slip_summary}</div>}
+                  </div>
+                )}
               </div>
-            ))}
+            )})}
           </div>
         )}
 
+        {/* EARNINGS */}
         {tab === 'earn' && (
           <>
             <div style={{ background: 'var(--green-lt)', border: '1px solid rgba(46,204,122,0.25)', borderRadius: 16, padding: '14px 16px', marginBottom: 16, display: 'flex', gap: 12 }}>
@@ -454,6 +507,7 @@ export default function TipsterDashboard() {
           </>
         )}
 
+        {/* STATS */}
         {tab === 'stats' && (
           <>
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -477,6 +531,7 @@ export default function TipsterDashboard() {
           </>
         )}
 
+        {/* PROFILE */}
         {tab === 'profile' && (
           <div className="card">
             <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)', marginBottom: 16 }}>Your public profile</div>
@@ -495,7 +550,15 @@ export default function TipsterDashboard() {
               <textarea className="inp" style={{ minHeight: 80, resize: 'none' }} defaultValue={tipster.description} />
             </div>
             <button className="btn-green">Save changes</button>
-            <button className="btn-ghost mt-3" onClick={() => { localStorage.removeItem('bf_tipster_id'); router.push('/tipster/login') }}>Sign out</button>
+            <button
+              className="btn-ghost mt-3"
+              onClick={async () => {
+                await fetch('/api/auth/logout', { method: 'POST' })
+                router.push('/tipster/login')
+              }}
+            >
+              Sign out
+            </button>
           </div>
         )}
 

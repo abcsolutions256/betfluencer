@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { getBuyerPhone } from '@/lib/guestId'
 
 export type PushStatus = 'unsupported' | 'denied' | 'granted' | 'prompt' | 'loading'
 
@@ -22,8 +23,8 @@ export function usePushNotifications() {
       const result = await Notification.requestPermission()
       if (result !== 'granted') { setStatus('denied'); return false }
       setStatus('granted')
-      // Store subscription keyed to phone number
-      const phone = localStorage.getItem('bf_phone')
+      // Store subscription keyed to the buyer's phone number
+      const phone = getBuyerPhone()
       if (phone) {
         localStorage.setItem(`bf_push_${phone}`, 'true')
       }

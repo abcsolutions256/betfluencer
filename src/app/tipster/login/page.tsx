@@ -1,63 +1,65 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { Loader2 } from 'lucide-react'
 
-export default function TipsterLogin() {
+export default function TipsterLoginPage() {
   const router = useRouter()
-  const [phone, setPhone]     = useState('')
+  const [phone, setPhone]       = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [err, setErr]           = useState('')
+  const [loading, setLoading]   = useState(false)
+  // Only show the "Sign up" link when public signups are open.
+  const [signupsOpen, setSignupsOpen] = useState(false)
 
-  async function login() {
-    if (!phone || !password) return
-    setLoading(true); setError('')
-    const res  = await fetch('/api/tipster/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'login', phone: `+256${phone}`, password }),
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then(r => r.json())
+      .then(d => setSignupsOpen(d.publicSignupsEnabled === true))
+      .catch(() => setSignupsOpen(false))
+  }, [])
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setErr(''); setLoading(true)
+    const res = await fetch('/api/tipster/auth', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'login', phone: phone.trim(), password }),
     })
-    const data = await res.json()
-    if (data.id) {
-      localStorage.setItem('bf_tipster_id', data.id)
-      localStorage.setItem('bf_tipster_name', data.name)
-      router.push('/tipster/dashboard')
-    } else {
-      setError(data.error ?? 'Wrong number or password. Please try again.')
-    }
+    const d = await res.json().catch(() => ({}))
     setLoading(false)
+    if (!res.ok) { setErr(d.error || 'Could not log in'); return }
+    router.push('/tipster/dashboard'); router.refresh()
   }
 
   return (
-    <div className="flex flex-col min-h-screen p-6" style={{ background: 'var(--bg)' }}>
-      <div style={{ marginBottom: 32, marginTop: 24 }}>
-        <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--gold)', marginBottom: 4 }}>
-          bet<span style={{ color: 'var(--offwhite)', fontWeight: 300 }}>fluencer</span>
+    <div style={shell}>
+      <form onSubmit={submit} style={card}>
+        <div style={title}>Tipster log in</div>
+        <div style={sub}>Manage your slips and earnings</div>
+        {err && <div style={errorBox}>{err}</div>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={prefix}>+256</div>
+          <input style={{ ...input, flex: 1 }} type="tel" placeholder="Mobile Money number" value={phone} onChange={e => setPhone(e.target.value)} autoFocus />
         </div>
-        <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--white)' }}>Tipster login</div>
-        <div style={{ fontSize: 14, color: 'var(--muted)', marginTop: 4, fontWeight: 500 }}>Sign in to manage your channel</div>
-      </div>
-
-      <div className="card">
-        <label className="lbl">Phone number <span style={{ color: 'var(--gold)' }}>*</span></label>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          <div className="inp" style={{ width: 'auto', padding: '14px 12px', flexShrink: 0, fontWeight: 800, color: 'var(--offwhite)' }}>+256</div>
-          <input className="inp flex-1" type="tel" placeholder="7XX XXX XXX" value={phone} onChange={e => setPhone(e.target.value)} />
-        </div>
-        <label className="lbl">Password <span style={{ color: 'var(--gold)' }}>*</span></label>
-        <input className="inp" style={{ marginBottom: 18 }} type="password" placeholder="Your password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()} />
-        {error && <div style={{ color: 'var(--red)', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{error}</div>}
-        <button className="btn-gold" style={{ opacity: (!phone || !password) ? 0.4 : 1 }} onClick={login}>
-          {loading ? <Loader2 size={16} className="spin" /> : '→'} Sign in
+        <input style={input} type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
+        <button style={btn} disabled={loading || !phone || !password}>
+          {loading ? <Loader2 size={16} className="spin" /> : 'Log in'}
         </button>
-      </div>
-
-      <div style={{ textAlign: 'center', marginTop: 16 }}>
-        <span style={{ fontSize: 13, color: 'var(--muted)' }}>No account? </span>
-        <Link href="/tipster/signup" style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, textDecoration: 'none' }}>Create one free</Link>
-      </div>
+        {signupsOpen && <div style={foot}>New tipster? <Link href="/tipster/signup" style={lnk}>Sign up</Link></div>}
+      </form>
     </div>
   )
 }
+
+const shell: React.CSSProperties = { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }
+const card: React.CSSProperties = { width: '100%', maxWidth: 380, background: 'var(--bg2)', border: '1px solid var(--line)', borderRadius: 18, padding: 24, display: 'flex', flexDirection: 'column', gap: 12 }
+const title: React.CSSProperties = { fontSize: 22, fontWeight: 800, color: 'var(--white)' }
+const sub: React.CSSProperties = { fontSize: 13, color: 'var(--muted)', marginBottom: 6 }
+const input: React.CSSProperties = { padding: '12px 14px', borderRadius: 12, background: 'var(--bg3)', border: '1px solid var(--line)', color: 'var(--white)', fontSize: 15, outline: 'none' }
+const prefix: React.CSSProperties = { display: 'flex', alignItems: 'center', padding: '0 13px', background: 'var(--bg3)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 14, fontWeight: 700, color: 'var(--offwhite)' }
+const btn: React.CSSProperties = { padding: 13, borderRadius: 12, border: 'none', background: 'var(--gold)', color: '#1A1205', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }
+const foot: React.CSSProperties = { fontSize: 12, color: 'var(--muted)', textAlign: 'center', marginTop: 6 }
+const lnk: React.CSSProperties = { color: 'var(--gold)', fontWeight: 700, textDecoration: 'none' }
+const errorBox: React.CSSProperties = { background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 10, padding: '9px 12px', fontSize: 13 }

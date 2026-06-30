@@ -30,3 +30,22 @@ next-env.d.ts
 # os
 .DS_Store
 Thumbs.db
+
+
+**.temp
+
+**/screenshots/**
+
+**/testing-screenshots/**
+
+# playwright e2e
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+.e2e-app.log
+**.branches
+# Prod DB backups/dumps — contain REAL production data (phones, hashes). Never commit.
+merge/backup/
+**.e2e**
+**.log

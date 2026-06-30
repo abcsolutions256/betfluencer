@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.local.example
+npm-debug.log*
+bet-code-worker
+supabase
+docs
+*.md
+.vercel
+.DS_Store
+screenshots

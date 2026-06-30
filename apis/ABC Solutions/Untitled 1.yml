@@ -1,0 +1,18 @@
+info:
+  name: Untitled 1
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: https://v3.football.api-sports.io/status
+  headers:
+    - name: x-apisports-key
+      value: 474ec1b5199f036b812676c32a6e868e
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

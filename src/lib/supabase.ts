@@ -7,16 +7,24 @@ const serviceKey   = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
 // Browser client — used in client components
 export const supabase = createClient(supabaseUrl, supabaseAnon)
 
-// Browser client function — used for storage uploads in client components
-export function supabaseBrowser() {
-  return createClient(supabaseUrl, supabaseAnon)
-}
-
-// Server client — uses correct project REST URL with service role key
+// Server client — uses correct project REST URL with service role key.
+//
+// `cache: 'no-store'` on the underlying fetch is REQUIRED: Next.js wraps the
+// global fetch with its Data Cache and persists GET responses to .next/cache,
+// so without this a read like the marketplace feed gets cached and serves
+// STALE data (a freshly posted slip never appears). Route-level
+// `dynamic = 'force-dynamic'` does not stop supabase-js's own fetch from being
+// cached, so we opt out here once, for every server-side query.
 export function supabaseServer() {
   return createClient(
-    `https://sooutpsbdgqelnnnfezp.supabase.co`,
+    supabaseUrl,
     serviceKey,
-    { auth: { persistSession: false } }
+    {
+      auth: { persistSession: false },
+      global: {
+        fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+          fetch(input, { ...init, cache: 'no-store' }),
+      },
+    }
   )
 }

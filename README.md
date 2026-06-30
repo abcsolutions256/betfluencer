@@ -1,104 +1,66 @@
 # Betfluencer
 
-Football tipster marketplace for Uganda. Built with Next.js, Supabase, and Africa's Talking.
+Football **tipster marketplace** for Uganda. Tipsters post betslips; users **pay per slip** over Mobile Money to unlock the picks. Finished slips (win/loss) are free to view. Mobile-first PWA.
+
+> New here? Read **[CLAUDE.md](CLAUDE.md)** for the architecture + known issues, **[TODO.md](TODO.md)** for the backlog, and **[docs/](docs/)** for the payment + improvement detail.
 
 ## Stack
-- **Frontend + Backend**: Next.js 14 (App Router)
-- **Database + Auth**: Supabase
-- **Payments + SMS**: Africa's Talking
-- **Hosting**: Vercel
+- **Next.js 14** (App Router) + React 18 + TypeScript + Tailwind
+- **Supabase** — Postgres only, via the service-role key (not Supabase Auth)
+- **ioTec Pay** — Mobile Money (MTN + Airtel UG), collections + disbursements
+- **Claude Vision** (`@anthropic-ai/sdk`) — betslip screenshot parsing
+- **api-football** — auto-verify match results
+- **Vercel** — hosting + cron
 
 ## Quick start
-
-### 1. Install dependencies
 ```bash
 npm install
+cp .env.local.example .env.local   # fill in Supabase + ioTec keys
+npm run dev                         # http://localhost:3000
 ```
+Leave `IOTEC_CLIENT_ID` empty (or `demo`) to run payments in demo mode — no real charges.
 
-### 2. Set up environment variables
-```bash
-cp .env.local.example .env.local
+## Database
+No Supabase CLI migrations yet (on the backlog). Set up by hand:
+1. Supabase project → SQL Editor
+2. Run `src/lib/schema.sql` (tables, indexes, auto-tick trigger, `tipster_rankings` view, seed)
+3. Run `src/lib/rls.sql` (RLS policies)
+
+Tables: `tipsters`, `betslips`, `betslip_legs`, `slip_purchases`, `payments`, `earnings`, `platform_settings`. View: `tipster_rankings`.
+
+## Payment flow (ioTec, per-slip)
 ```
-Fill in your Supabase and Africa's Talking credentials.
-
-### 3. Set up the database
-- Go to your Supabase project → SQL Editor
-- Paste and run the contents of `src/lib/schema.sql`
-- This creates all tables, indexes, RLS policies, and the rankings view
-
-### 4. Run locally
-```bash
-npm run dev
+Buyer taps "Unlock" → POST /api/subscribe
+  → insert pending slip_purchases + payments
+  → ioTec collect (MoMo prompt to buyer)
+Buyer approves → ioTec → POST /api/webhooks/iotec (signed)
+  → mark payment confirmed → unlock slip_purchases → disburse 90% to tipster → log earning
+  → on disburse failure: refund buyer
 ```
-Open http://localhost:3000
+Platform takes 10% at transaction time; no funds held. **Status:** the ioTec library (`src/lib/payments.ts`) is in place; the end-to-end wiring is still being built — see [docs/PAYMENTS-IOTEC.md](docs/PAYMENTS-IOTEC.md) and [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md).
 
-### 5. Deploy to Vercel
-```bash
-npx vercel
-```
-Add your environment variables in the Vercel dashboard.
-
----
-
-## Project structure
-
+## Structure
 ```
 src/
   app/
-    page.tsx                  ← Channels (home page)
-    rankings/page.tsx          ← Rankings
-    mine/page.tsx              ← My subscriptions (phone lookup)
-    channel/[slug]/page.tsx    ← Tipster profile + subscribe flow
-    tipster/
-      login/page.tsx           ← Tipster login
-      signup/page.tsx          ← Tipster signup
-      dashboard/page.tsx       ← Tipster dashboard
+    page.tsx · channels · rankings · mine · channel/[slug]   ← public
+    tipster/{login,signup,dashboard}                          ← tipster
+    admin                                                     ← admin
     api/
-      subscribe/route.ts       ← Payment collection + disbursement
-      tipster/[slug]/route.ts  ← Tipster public profile API
-      tipster/auth/route.ts    ← Tipster login + signup API
-      tips/route.ts            ← Post tips + SMS notifications
-  components/
-    layout/Navigation.tsx      ← TopBar + BottomNav
-    ui/index.tsx               ← TipsterCard, TipRow, WinRate, etc.
+      subscribe          ← buy (collect) + buyer purchases
+      tips               ← post betslips (manual or booking-code)
+      parse-slip         ← Claude Vision screenshot → slip
+      verify             ← cron: auto-verify results
+      webhooks/iotec     ← ioTec payment confirmation
+      tipster/* · admin/* · ads/*
   lib/
-    supabase.ts                ← Supabase client (browser + server)
-    payments.ts                ← Africa's Talking: collect, disburse, SMS
-    schema.sql                 ← Full database schema
-  types/index.ts               ← All TypeScript types
+    supabase.ts · db.ts · payments.ts (ioTec) · auth.ts · adminAuth.ts
+    footballApi.ts · schema.sql · rls.sql
+  types/ · components/ · hooks/
 ```
 
----
-
-## Payment flow
-
+## Deploy
+```bash
+npx vercel
 ```
-User pays → STK push (Africa's Talking collect API)
-         → Platform confirms receipt
-         → Disburse 90% to tipster (disbursement API)
-         → If 3 failures → refund user in full
-         → On success → create subscription → unlock channel → send SMS
-```
-
-Platform takes 10% at transaction time. Tipster receives 90% instantly. No funds held.
-
----
-
-## Key APIs
-
-### Africa's Talking
-- Sign up: https://africastalking.com
-- Docs: https://developers.africastalking.com
-- Covers MTN Uganda + Airtel Uganda in one integration
-
-### Supabase
-- Sign up: https://supabase.com
-- Create a new project, copy URL + anon key to .env.local
-
----
-
-## Next steps
-- [ ] Africa's Talking webhook for async payment confirmation
-- [ ] Subscription expiry cron job (Vercel cron)
-- [ ] Admin dashboard
-- [ ] Expand to Kenya (M-Pesa) and Tanzania (Tigo, Airtel)
+Add the env vars in the Vercel dashboard; point the ioTec webhook at `https://<domain>/api/webhooks/iotec`.

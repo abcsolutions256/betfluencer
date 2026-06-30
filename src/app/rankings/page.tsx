@@ -92,7 +92,9 @@ export default function RankingsPage() {
           const winRate = settled > 0 ? t.wins_last_10 / settled : 0
           return winRate * (t.avg_odds || 1)
         }
-        const sorted = (d.tipsters ?? []).sort((a: TipsterRow, b: TipsterRow) => scoreOf(b) - scoreOf(a))
+        // ROI is the PRIMARY ranking metric; win-rate × odds score breaks ties.
+        const sorted = (d.tipsters ?? []).sort((a: TipsterRow, b: TipsterRow) =>
+          ((b.roi ?? 0) - (a.roi ?? 0)) || (scoreOf(b) - scoreOf(a)))
         setTipsters(sorted)
         setLoading(false)
       })
@@ -118,7 +120,7 @@ export default function RankingsPage() {
               </div>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--white)' }}>Betfluencer rankings</div>
-                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Win rate · avg odds · score</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)' }}>Ranked by ROI · win rate · odds</div>
               </div>
             </div>
             <span style={{ fontSize: 10, color: 'var(--gold)', background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 20, padding: '3px 10px', whiteSpace: 'nowrap' }}>
@@ -126,7 +128,7 @@ export default function RankingsPage() {
             </span>
           </div>
           <div style={{ fontSize: 10, color: 'var(--muted)', background: 'var(--bg3)', border: '1px solid var(--line)', borderRadius: 8, padding: '5px 10px' }}>
-            Score = <strong style={{ color: 'var(--offwhite)' }}>win rate × avg winning odds</strong> · <strong style={{ color: 'var(--gold)' }}>rolling 4 weeks only</strong>
+            Ranked by <strong style={{ color: 'var(--gold)' }}>ROI</strong> (profit per 1u staked), then <strong style={{ color: 'var(--offwhite)' }}>win rate × odds</strong> · <strong style={{ color: 'var(--gold)' }}>rolling 4 weeks</strong>
           </div>
         </div>
 
@@ -157,7 +159,7 @@ export default function RankingsPage() {
                   <th className="rk-optional" style={{ ...cell, ...th, width: 28 }}>L</th>
                   <th style={{ ...cell, ...th, width: 44 }}>Win%</th>
                   <th style={{ ...cell, ...th, width: 46 }}>Odds</th>
-                  <th style={{ ...cell, ...th, width: 56 }}>ROI</th>
+                  <th style={{ ...cell, ...th, width: 56, color: 'var(--gold)', fontWeight: 700 }}>ROI ▾</th>
                   <th className="rk-optional" style={{ ...cell, ...th, width: 56 }}>Streak</th>
                   <th style={{ ...cell, ...th, width: 88 }}>Last 5</th>
                   {showExtra && <th style={{ ...cell, ...th, width: 50 }}>Score</th>}

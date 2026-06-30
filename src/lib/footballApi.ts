@@ -17,6 +17,36 @@ async function apiFetch(endpoint: string) {
   return res.json()
 }
 
+// ── Plan-aware fixture window ──────────────────────────────────────
+// Free tier can only fetch ~yesterday→+2 days. After upgrading, set
+// FOOTBALL_API_PLAN=paid (or widen FOOTBALL_API_WINDOW_BACK_DAYS) and older
+// matches resolve by date too — no code change needed. Forward window stays
+// small (we only settle finished matches).
+const PLAN             = (process.env.FOOTBALL_API_PLAN ?? 'free').toLowerCase()
+const WINDOW_BACK_DAYS = Number(process.env.FOOTBALL_API_WINDOW_BACK_DAYS ?? (PLAN === 'paid' ? 400 : 1))
+const WINDOW_FWD_DAYS  = Number(process.env.FOOTBALL_API_WINDOW_FWD_DAYS  ?? 2)
+
+const dayStr = (ms: number) => new Date(ms).toISOString().split('T')[0]
+
+// Is a fixture date within the current plan's fetchable window?
+function planAllowsDate(date: string): boolean {
+  const t = Date.parse(`${date}T00:00:00Z`)
+  if (Number.isNaN(t)) return false
+  const now = Date.now()
+  return t >= now - WINDOW_BACK_DAYS * 86400000 && t <= now + WINDOW_FWD_DAYS * 86400000
+}
+
+// One fixtures-by-date request, cached per settlement run so a date is fetched
+// at most once and shared across every leg — keeps us under the daily quota.
+export type FixtureCache = Map<string, any[]>
+async function getFixturesByDate(date: string, cache?: FixtureCache): Promise<any[]> {
+  if (cache?.has(date)) return cache.get(date)!
+  const data = await apiFetch(`/fixtures?date=${date}`)
+  const fixtures = data.response ?? []
+  cache?.set(date, fixtures)
+  return fixtures
+}
+
 // Normalize a team name for fuzzy comparison
 function normalize(name: string): string {
   return name
@@ -47,27 +77,24 @@ export async function getFixtureById(fixtureId: number | string) {
 // ── FIXTURE LOOKUP BY TEAMS + DATE (free-plan compatible) ──────────
 // Queries by DATE ONLY (no search param), then matches teams client-side.
 // Returns null if outside the free-plan window or no match found.
-export async function findFixture(homeTeam: string, awayTeam: string, date: string | null) {
-  // Free plan only allows roughly yesterday → +2 days.
-  // Build candidate dates within that window.
+export async function findFixture(homeTeam: string, awayTeam: string, date: string | null, cache?: FixtureCache) {
   const now = Date.now()
-  const allowed = new Set<string>()
-  for (let d = -1; d <= 2; d++) {
-    allowed.add(new Date(now + d * 86400000).toISOString().split('T')[0])
-  }
-
-  const datesToTry: string[] = []
-  if (date && allowed.has(date)) {
-    datesToTry.push(date)
+  let datesToTry: string[]
+  if (date) {
+    // A known date: fetch it only if the plan can reach it (else give up —
+    // older-than-window matches need a paid plan or manual settlement).
+    if (!planAllowsDate(date)) return null
+    datesToTry = [date]
   } else {
-    // No usable date — try the whole allowed window
-    datesToTry.push(...Array.from(allowed))
+    // No date — best-effort over the recent few days (kept small to limit
+    // request fan-out; the cache dedupes repeats across legs).
+    datesToTry = []
+    for (let d = -1; d <= WINDOW_FWD_DAYS; d++) datesToTry.push(dayStr(now + d * 86400000))
   }
 
   for (const tryDate of datesToTry) {
     try {
-      const data = await apiFetch(`/fixtures?date=${tryDate}`)
-      const fixtures = data.response ?? []
+      const fixtures = await getFixturesByDate(tryDate, cache)
       const match = fixtures.find((f: any) => {
         const home = f.teams?.home?.name ?? ''
         const away = f.teams?.away?.name ?? ''
@@ -100,38 +127,44 @@ export function verifyLegAgainstFixture(pick: string, fixture: any): VerifyResul
   return determineResult(pick.toLowerCase().trim(), { homeGoals, awayGoals, totalGoals, htHome, htAway, home, away, fixture })
 }
 
+export interface LegVerifyResult { result: VerifyResult; fixtureId: number | null }
+
 export async function verifyLeg(leg: {
   match:       string
   pick:        string
   match_time:  string | null
   fixture_id?: number | string | null
-}): Promise<VerifyResult> {
+}, cache?: FixtureCache): Promise<LegVerifyResult> {
+  const toId = (v: any) => (typeof v === 'number' ? v : v ? Number(v) || null : null)
   try {
-    // If we already stored a fixture_id, verify directly by ID (most reliable)
+    // If we already stored a fixture_id, verify directly by ID (most reliable
+    // and quota-light — works for older matches the date window can't reach).
     if (leg.fixture_id) {
       const fixture = await getFixtureById(leg.fixture_id)
-      if (!fixture) return 'pending'
-      return verifyLegAgainstFixture(leg.pick, fixture)
+      if (!fixture) return { result: 'pending', fixtureId: toId(leg.fixture_id) }
+      return { result: verifyLegAgainstFixture(leg.pick, fixture), fixtureId: fixture.fixture?.id ?? toId(leg.fixture_id) }
     }
 
     // Otherwise resolve by teams + date
     const parts = leg.match.split(/\s+vs\.?\s+/i)
-    if (parts.length < 2) return 'unverifiable'
+    if (parts.length < 2) return { result: 'unverifiable', fixtureId: null }
     const [home, away] = parts.map(s => s.trim())
 
     const date = leg.match_time ? leg.match_time.split('T')[0] : null
 
     if (leg.match_time && new Date(leg.match_time).getTime() > Date.now() - 2 * 60 * 60 * 1000) {
-      return 'pending'
+      return { result: 'pending', fixtureId: null }
     }
 
-    const fixture = await findFixture(home, away, date)
-    if (!fixture) return 'unverifiable'
+    const fixture = await findFixture(home, away, date, cache)
+    if (!fixture) return { result: 'unverifiable', fixtureId: null }
 
-    return verifyLegAgainstFixture(leg.pick, fixture)
+    // Capture the resolved id so the caller can persist it → next run settles
+    // this leg by ID (cheap + works even once it drops out of the date window).
+    return { result: verifyLegAgainstFixture(leg.pick, fixture), fixtureId: fixture.fixture?.id ?? null }
   } catch (err) {
     console.error('verifyLeg error:', err)
-    return 'unverifiable'
+    return { result: 'unverifiable', fixtureId: null }
   }
 }
 
@@ -140,6 +173,11 @@ function determineResult(pick: string, data: {
   htHome: number; htAway: number; home: string; away: string; fixture: any
 }): VerifyResult {
   const { homeGoals, awayGoals, totalGoals, htHome, htAway, home, away } = data
+
+  // betPawa "1X2 1UP" settles the instant the pick goes one goal ahead — a team
+  // can lead 1-0, lose 1-2, and the bet still WON. The final score can't grade
+  // it, so never auto-settle; leave it for an admin to settle manually.
+  if (/\b1\s*up\b/.test(pick)) return 'unverifiable'
 
   const overMatch = pick.match(/over\s+(\d+\.?\d*)/)
   if (overMatch) {
@@ -246,15 +284,17 @@ function determineResult(pick: string, data: {
 }
 
 // ── BATCH VERIFY ALL LEGS OF A SLIP ──────────────────────────────
+// Sequential (not Promise.all) so the per-date cache is populated before the
+// next leg checks it — legs sharing a date then cost a single request.
 export async function verifySlip(legs: {
   id: string; match: string; pick: string; match_time: string | null; fixture_id?: number | string | null
-}[]): Promise<{ id: string; result: VerifyResult }[]> {
-  const results = await Promise.all(
-    legs.map(async leg => ({
-      id:     leg.id,
-      result: await verifyLeg(leg),
-    }))
-  )
+}[], cache?: FixtureCache): Promise<{ id: string; result: VerifyResult; fixtureId: number | null }[]> {
+  const c = cache ?? new Map<string, any[]>()
+  const results: { id: string; result: VerifyResult; fixtureId: number | null }[] = []
+  for (const leg of legs) {
+    const r = await verifyLeg(leg, c)
+    results.push({ id: leg.id, result: r.result, fixtureId: r.fixtureId })
+  }
   return results
 }
 

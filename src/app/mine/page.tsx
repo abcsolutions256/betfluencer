@@ -3,22 +3,22 @@ import { useState, useEffect } from 'react'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
 import { Avatar, VerifiedTick } from '@/components/ui'
 import { FollowButton } from '@/components/ui/FollowButton'
-import { Smartphone, Loader2, Bell, Users, Bookmark } from 'lucide-react'
+import { Loader2, Users, Bookmark } from 'lucide-react'
 import { getFollows } from '@/lib/follows'
+import { getBuyerPhone, setBuyerPhone } from '@/lib/guestId'
 import Link from 'next/link'
 
 type MineTab = 'following' | 'purchases'
 
 export default function MinePage() {
-  const [tab,      setTab]     = useState<MineTab>('following')
-  const [follows,  setFollows] = useState<string[]>([])
+  const [tab,      setTab]      = useState<MineTab>('following')
+  const [follows,  setFollows]  = useState<string[]>([])
   const [tipsters, setTipsters] = useState<any[]>([])
-  const [phone,    setPhone]   = useState('')
-  const [name,     setName]    = useState('')
-  const [nameStep, setNameStep] = useState(false)
-  const [loading,  setLoading] = useState(false)
-  const [subs,     setSubs]    = useState<any[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [subs,     setSubs]     = useState<any[]>([])
+  const [lookup,   setLookup]   = useState('')
 
+  // Load follows (stored locally, no login needed)
   useEffect(() => {
     setFollows(getFollows())
     const handler = () => setFollows(getFollows())
@@ -26,31 +26,37 @@ export default function MinePage() {
     return () => window.removeEventListener('bf-follow-change', handler)
   }, [])
 
-  // Load real tipsters from API
+  // Load real tipsters from API (reads the live tipster stats view)
   useEffect(() => {
     fetch('/api/tipster', { cache: 'no-store' })
       .then(r => r.json())
       .then(d => setTipsters(d.tipsters ?? []))
+      .catch(() => setTipsters([]))
   }, [])
 
-  const followedTipsters = tipsters.filter(t => follows.includes(t.id))
-
-  async function lookupPhone() {
-    if (phone.length < 7) return
+  // Buyers don't log in — purchases are keyed on the phone they paid with.
+  // Use the stored phone on load; a returning buyer can re-enter their phone
+  // to recover purchases (incl. on another device).
+  function loadPurchases(phone: string) {
     setLoading(true)
-    const res  = await fetch(`/api/subscribe?phone=%2B256${phone}`)
-    const data = await res.json()
-    setLoading(false)
-    const savedName = localStorage.getItem(`bf_name_${phone}`)
-    if (savedName) { setName(savedName); setSubs(data.subscriptions ?? []); setTab('purchases') }
-    else { setSubs(data.subscriptions ?? []); setNameStep(true) }
+    fetch('/api/subscribe', { headers: phone ? { 'x-buyer-phone': phone } : {} })
+      .then(x => x.json()).catch(() => ({ subscriptions: [] }))
+      .then(r => { setSubs(r.subscriptions ?? []); setLoading(false) })
+  }
+  useEffect(() => {
+    const p = getBuyerPhone()
+    setLookup(p)
+    if (p) loadPurchases(p); else setLoading(false)
+  }, [])
+
+  function submitLookup() {
+    const p = lookup.trim()
+    if (!p) return
+    setBuyerPhone(p)
+    loadPurchases(p)
   }
 
-  function saveName() {
-    if (!name.trim()) return
-    localStorage.setItem(`bf_name_${phone}`, name.trim())
-    setTab('purchases')
-  }
+  const followedTipsters = tipsters.filter(t => follows.includes(t.id))
 
   const tabs = [
     { key: 'following', label: 'Following', icon: Users,    badge: 0 },
@@ -62,6 +68,7 @@ export default function MinePage() {
       <TopBar />
       <main className="flex-1 overflow-y-auto pb-6">
 
+        {/* Header */}
         <div style={{ background: 'var(--bg2)', padding: '12px 16px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>My Betfluencer</div>
@@ -69,6 +76,7 @@ export default function MinePage() {
           </div>
         </div>
 
+        {/* Tabs */}
         <div style={{ display: 'flex', background: 'var(--bg2)', borderBottom: '1px solid var(--line)' }}>
           {tabs.map(({ key, label, icon: Icon, badge }) => (
             <button key={key} onClick={() => setTab(key as MineTab)} style={{ flex: 1, padding: '11px 0', border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: tab === key ? 700 : 500, color: tab === key ? 'var(--gold)' : 'var(--muted)', borderBottom: `2px solid ${tab === key ? 'var(--gold)' : 'transparent'}` }}>
@@ -81,7 +89,7 @@ export default function MinePage() {
 
         <div style={{ padding: '14px 14px 0' }}>
 
-          {/* FOLLOWING TAB */}
+          {/* ── FOLLOWING TAB ── */}
           {tab === 'following' && (
             <>
               {follows.length === 0 ? (
@@ -112,7 +120,7 @@ export default function MinePage() {
                         <FollowButton tipsterId={t.id} size="sm" />
                       </div>
                       <div style={{ borderTop: '1px solid var(--line)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t.wins_last_10 ?? 0} wins · {(t.avg_odds ?? 0).toFixed(1)}x odds</span>
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t.wins_last_10 ?? 0} wins · {Number(t.avg_odds ?? 0).toFixed(1)}x odds</span>
                         <Link href={`/channel/${t.username}`} style={{ textDecoration: 'none' }}>
                           <button style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 20, cursor: 'pointer' }}>View →</button>
                         </Link>
@@ -124,77 +132,63 @@ export default function MinePage() {
             </>
           )}
 
-          {/* PURCHASES TAB */}
+          {/* ── PURCHASES TAB ── */}
           {tab === 'purchases' && (
             <>
-              {!name && !nameStep && (
-                <>
-                  <div style={{ textAlign: 'center', padding: '20px 0 16px' }}>
-                    <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                      <Smartphone size={26} color="var(--gold)" />
-                    </div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 6 }}>See your purchases</div>
-                    <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>Enter the number you paid with</div>
-                  </div>
-                  <div className="card">
-                    <label className="lbl">Mobile Money number</label>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                      <div className="inp" style={{ width: 'auto', padding: '14px 12px', flexShrink: 0, fontWeight: 800, color: 'var(--offwhite)' }}>+256</div>
-                      <input className="inp flex-1" type="tel" placeholder="7XX XXX XXX" value={phone} onChange={e => setPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && lookupPhone()} />
-                    </div>
-                    <button className="btn-gold" style={{ opacity: phone.length < 7 ? 0.4 : 1 }} onClick={lookupPhone}>
-                      {loading ? <Loader2 size={16} className="spin" /> : '🔍'} Find my purchases
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {nameStep && !name && (
-                <div className="card">
-                  <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 4 }}>What is your name?</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>So tipsters know who their buyers are</div>
-                  <input className="inp" placeholder="e.g. James Okello" value={name} onChange={e => setName(e.target.value)} style={{ marginBottom: 14 }} onKeyDown={e => e.key === 'Enter' && saveName()} />
-                  <button className="btn-gold" style={{ opacity: !name.trim() ? 0.4 : 1 }} onClick={saveName}>Continue →</button>
-                </div>
-              )}
-
-              {name && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)' }}>Hi, {name} 👋</div>
-                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>+256 {phone}</div>
-                    </div>
-                    <button onClick={() => { setName(''); setNameStep(false); setPhone('') }} style={{ background: 'none', border: '1px solid var(--line)', borderRadius: 10, padding: '6px 14px', color: 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Change</button>
-                  </div>
-                  {subs.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>
-                      <div style={{ fontSize: 28, marginBottom: 10 }}>🎫</div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--offwhite)', marginBottom: 8 }}>No purchases found</div>
-                      <Link href="/slips"><button className="btn-gold" style={{ maxWidth: 220 }}>Browse slips</button></Link>
-                    </div>
-                  ) : subs.map((s: any) => (
-                    <div key={s.id} className="card">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                        <Avatar name={s.tipster?.name ?? '?'} size={42} />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)' }}>{s.tipster?.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>Purchased {new Date(s.purchased_at).toLocaleDateString()}</div>
+              {/* Phone lookup — recover purchases by the number you paid with */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                <input
+                  value={lookup}
+                  onChange={e => setLookup(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') submitLookup() }}
+                  placeholder="Phone you paid with (+256…)"
+                  type="tel"
+                  style={{ flex: 1, padding: '11px 13px', borderRadius: 12, background: 'var(--bg3)', border: '1px solid var(--line)', color: 'var(--white)', fontSize: 14, outline: 'none' }}
+                />
+                <button onClick={submitLookup} disabled={!lookup.trim()} style={{ padding: '0 16px', background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', opacity: lookup.trim() ? 1 : 0.5 }}>Look up</button>
+              </div>
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '44px 0' }}><Loader2 size={26} color="var(--gold)" className="spin" /></div>
+              ) : subs.length === 0 ? (
+                <Empty icon="🎫" title="No purchases yet">
+                  <Link href="/slips"><button className="btn-gold" style={{ maxWidth: 200 }}>Browse slips</button></Link>
+                </Empty>
+              ) : subs.map((s: any) => (
+                <div key={s.id} className="card" style={{ marginBottom: 10, padding: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <Avatar name={s.tipster?.name ?? '?'} size={42} />
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)' }}>{s.tipster?.name ?? 'Tipster'}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                          {(s.betslip?.game_count ?? '—')} games · odds {Number(s.betslip?.total_odds ?? 0).toFixed(2)} · UGX {(s.amount_paid ?? 0).toLocaleString()}
                         </div>
-                        <span className={s.status === 'active' ? 'pill-green' : 'pill-muted'}>{s.status}</span>
                       </div>
-                      <Link href={`/channel/${s.tipster?.username}`} style={{ textDecoration: 'none' }}>
-                        <button className="btn-gold" style={{ padding: '10px', fontSize: 13 }}>View channel →</button>
-                      </Link>
                     </div>
-                  ))}
-                </>
-              )}
+                    <span className={s.status === 'active' ? 'pill-green' : 'pill-muted'}>{s.status}</span>
+                  </div>
+                  {s.tipster?.username && (
+                    <Link href={`/channel/${s.tipster.username}`} style={{ textDecoration: 'none' }}>
+                      <button className="btn-gold" style={{ padding: '10px', fontSize: 13 }}>View channel →</button>
+                    </Link>
+                  )}
+                </div>
+              ))}
             </>
           )}
         </div>
       </main>
       <BottomNav />
+    </div>
+  )
+}
+
+function Empty({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '44px 0', color: 'var(--muted)' }}>
+      <div style={{ fontSize: 30, marginBottom: 10 }}>{icon}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--offwhite)', marginBottom: 16 }}>{title}</div>
+      {children}
     </div>
   )
 }

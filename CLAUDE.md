@@ -1,0 +1,86 @@
+# CLAUDE.md — Betfluencer (Bet Influence)
+
+Guide for Claude Code / any agent working in this repo. Read this first. Full system + infra walkthrough in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); backlog in [`TODO.md`](TODO.md).
+
+## What this is
+Football **tipster marketplace** for Uganda. Tipsters post betslips; users **pay per slip** over Mobile Money to unlock the picks. Finished slips (win/loss) are free to view; pending slips are the paid product. Mobile-first PWA. Client is **ABC Solutions** (Abdallah Kambugu). Sister product **Visit Africa** (travel site, SEO work) is a separate repo.
+
+Business model: **pay-per-slip**, not subscriptions. Platform takes **10%** commission at transaction time, tipster gets 90%. Collect from buyer automatically; **tipster payouts are disbursed MANUALLY by an admin** (no auto-disbursement — 2026-06-26). Each sale records an earning + a `pending` `tipster_payout` disbursement row as the manual-payout queue.
+
+## Stack
+- **Next.js 14.2.3** App Router + **React 18** + **TypeScript** + **Tailwind** (inline styles + CSS vars in `globals.css`).
+- **Supabase** — Postgres (data baseline = main's prod). Server work uses the service-role client `supabaseServer()` (`src/lib/supabase.ts`, pins `cache:'no-store'`). **Supabase Auth is NOT used** (reverted 2026-06-26): the `profiles` table + auth trigger/RLS remain in the DB but dormant. The anon/session clients (`src/lib/supabase/client.ts`, `src/lib/supabase/server.ts`) are unused.
+- **Auth = phone identity, signed-cookie sessions** (no email). Tipsters log in with **phone + password** (sha256 `salt:hash`, `src/lib/auth.ts`) → `POST /api/tipster/auth`. **Admin = a single master password** `ADMIN_PASSWORD` → `POST /api/admin/login` (as on main). Both set an HMAC-signed httpOnly cookie (`src/lib/auth/cookie.ts`; `getMyTipster`/`requireRole` in `src/lib/auth/session.ts`) — the cookie is server-validated, NOT main's old forgeable base64 token. **Buyers do NOT log in** — identified by the **phone they pay with** (`slip_purchases.user_phone`; client `src/lib/guestId.ts` → `x-buyer-phone`; server `src/lib/buyer.ts`). Sign key = `SESSION_SECRET` (falls back to the service-role key).
+- **ioTec Pay** — Mobile Money (MTN + Airtel UG), collections + disbursements. Lib: `src/lib/payments.ts`.
+- **Anthropic SDK** — betslip screenshot parsing (`@anthropic-ai/sdk`, `api/parse-slip`).
+- **api-football** — auto-settle finished slips + legs (`src/lib/footballApi.ts`, `api/verify`). Triggered by the Docker `sync` loop (`x-sync-token`, every `VERIFY_INTERVAL`≈6h), the admin auto-verify button (session), or a Vercel cron (`Bearer CRON_SECRET`). Free tier = 100 req/day + ~3-day window → plan-gated via `FOOTBALL_API_PLAN`; resolved `fixture_id` is cached onto legs for cheap re-settles; ungradeable slips → `result_proof_pending` for **manual admin settle** (`/api/admin/settle`).
+- **Africa's Talking** — SMS (configured in `.env`, but `sendSMS` is currently a stub that only logs).
+- Host: **Vercel** (`vercel.json`, cron). Note: the brain plan was Hetzner + Coolify — confirm target before deploy.
+
+## Commands
+```bash
+npm run dev      # local dev → http://localhost:3000
+npm run build    # production build
+npm run start    # serve build
+npm run lint     # eslint (next lint)
+npm run test:e2e # Playwright e2e MERGE GATE — boots local Supabase + ioTec demo, 7 specs (scripts/e2e.sh)
+```
+Tests: Playwright e2e in `tests/e2e/` (see `tests/e2e/README.md`). Prereq once: `npx playwright install chromium`. Covers home, tipster signup/login, manual-slip→verified+proof-only feed, coded-slip→pending+secret hidden, guest purchase (demo)→reveal entitlement, admin hide, rankings.
+
+## Database
+Supabase CLI migrations: `supabase/config.toml` + `supabase/migrations/`. Apply with `npm run db:push` (or `supabase db reset` locally). Tables also mirrored in `src/lib/schema.sql` / `rls.sql` for reference.
+**Migrations 0001–0010. Apply 0002,0003,0004,0005,0006,0007,0008,0009,0010 to the LIVE DB** (0005 = auth/paywall overhaul; 0010 = skip-verified sync + `verify_attempts`).
+
+**Tables:** `profiles`(role: user|tipster|admin), `tipsters`, `betslips`(+`verification_status`,`hidden`,`verify_attempts`,proof cols), `betslip_legs`, **`betslip_secrets`**(code/site/screenshot — service-role only), `slip_purchases`(`buyer_key` for guests), `slip_verifications`(+`normalized`/`summary`/`total_odds`), `transactions`(ioTec ledger), `payments`(legacy), `earnings`, `platform_settings`. View: `tipster_rankings`.
+
+Note: `betslips`/`betslip_legs`/`slip_purchases` have **NO `created_at`** — don't select/order by it (silent empty feed).
+
+## Layout
+- `src/app/page.tsx` channels home · `rankings` · `mine` (phone lookup) · `channel/[slug]` (tipster profile, read-only) · `channels` · `advertise` · `about` · `admin`.
+- `src/app/tipster/` — `login`, `signup`, `dashboard`, `page`.
+- `src/app/api/` — `payments/initiate` + `payments/status` (ioTec buy + poll), `webhooks/iotec` (confirm), `admin/transactions`, `subscribe` (GET purchases only), `tips`, `verify`, `parse-slip`, `tipster/*`, `admin/*`, `ads/*`.
+- `src/lib/` — `iotec.ts` (ioTec client), `transactions.ts` (transactions CRUD), `fulfillment.ts` (unlock + payout), `supabase.ts`, `db.ts` (queries + mock fallback), `payments.ts` (re-exports iotec), `auth.ts` (tipster pwd), `adminAuth.ts`, `footballApi.ts`, `mockData.ts`, `rateLimit.ts`.
+- `src/types/` — `index.ts`, `betslip.ts`, `ads.ts` + `.d.ts` shims.
+
+## Conventions
+- API routes: `NextResponse.json`, **zod** `safeParse` on input, `rateLimit(name, ip)` at the top of mutating routes.
+- DB access only server-side via `supabaseServer()` (service role). Browser uses the anon client (`supabase`).
+- `db.ts` pattern: `const db = supabaseServer(); if (!db) return MOCK…` — the mock fallback is how it runs with no DB.
+- Money is **integer UGX** everywhere (no decimals). Phone normalised to `+256XXXXXXXXX` (`normalisePhone`).
+- Commission = `PLATFORM_COMMISSION` env (default `0.10`).
+- **API routes that touch the DB must `export const dynamic = 'force-dynamic'`** — otherwise `next build` prerenders them and `supabaseServer()` runs with no service key (secrets aren't build args) → "supabaseKey is required" (fails the Docker build). Done for `api/slips` + `api/tipster`.
+- **Docker:** `web` pins `PORT=3000` in compose `environment` (the worker uses 8080; a shared `PORT` in `.env` would leak in via `env_file`). `NEXT_PUBLIC_*` are build args; server secrets are runtime env.
+
+## Payments (ioTec Pay — implemented 2026-06-10)
+- **Client:** `src/lib/iotec.ts` — OAuth2 via `id.iotec.io/connect/token` → Bearer; `collect`/`getCollectionStatus`/`disburse`/`getWalletBalance`; **demo mode** when `IOTEC_CLIENT_ID` is empty/`demo` (no real charges, polling resolves to success).
+- **Flow:** buy button → `POST /api/payments/initiate` (creates pending `transactions` + `slip_purchases`, calls ioTec collect — MoMo = phone prompt, Card = `card_redirect_url`) → confirm via `POST /api/webhooks/iotec` (security-header check **+ status refetch**, never trusts the payload) or `GET /api/payments/status` polling → `fulfillTransaction` unlocks the purchase, logs the earning, and records a **`pending` `tipster_payout` disbursement** (idempotent on `slip_purchases.status`). **No auto-disbursement** — an admin pays the tipster manually (the `disburse()` lib fn remains for a future manual-payout action).
+- **UI:** `usePayment()` hook + `<PaymentSheet>` (bottom sheet that persists until terminal) + `<BuySlipButton>`; wired into `BetslipFeed` and `slips`. Card payments return to `/pay/return`.
+- **Ledger:** every collection + payout is a row in `transactions`; admin → **Transactions** tab.
+- **Before production:** apply `supabase/migrations/20260610000002_transactions.sql` to the live DB and set `IOTEC_*` env (incl. `IOTEC_AUTH_URL`, `IOTEC_WEBHOOK_SECRET` = the callback security header configured in the ioTec portal).
+
+## Bet-code verification worker (built 2026-06-10)
+Separate Dockerized service in [`bet-code-worker/`](bet-code-worker/) — Vercel can't run headless Chrome. It's a **stateless** Puppeteer API: `POST /verify { betting_site, booking_code }` → loads the code on the bookie → returns selected `matches[]` + `raw_text` + `found` + a debug `screenshot_url`. Selectors for 1xBet/22Bet/betPawa/SportPesa/MozzartBet are HTML-confirmed (`src/adapters.js`); SportyBet/Betway unverified. Env: `BET_CODE_WORKER_URL` + `BET_CODE_WORKER_KEY`. Keep it on a private network behind the key.
+
+**Auto-sync (2026-06-12):** posting/updating a booking-code slip (`/api/tips`) fires `verifyAndRecord` ([`src/lib/verifyCode.ts`](src/lib/verifyCode.ts)) → worker → upserts `slip_verifications` (one current row per betslip, unique on `betslip_id`). The `sync` container polls `POST /api/slips/sync-codes` (header `x-sync-token: SYNC_TOKEN`) every `SYNC_INTERVAL`s to keep pending coded slips current with the bookies.
+
+**Full stack:** root [`docker-compose.yml`](docker-compose.yml) runs `web` + `bet-code-worker` + `sync`. The web image is a Next **standalone** build (`output:'standalone'`, [`Dockerfile`](Dockerfile)); `NEXT_PUBLIC_*` are build args, server secrets are runtime env. `docker compose up --build`.
+
+## Current state (2026-06-25)
+- **Auth reverted to phone identity (2026-06-26):** Supabase Auth replaced by phone+password signed-cookie sessions (see Stack). Admin = `requireRole('admin')` backed by the cookie (forgeable `base64("admin:")` token still GONE). Paywall unchanged: service-role-only `betslip_secrets` + gated `GET /api/slips/[id]/reveal`; marketplace shows **proof only**. Buyers identified by the phone they pay with (`slip_purchases.user_phone`); the screenshot/code/picks reveal to a buyer with an active purchase for that phone.
+- **Verification:** the app calls the worker **directly** (`/api/tips`, `sync-codes`, `verify-code` → `verifyAndRecord` → `callWorker` → `BET_CODE_WORKER_URL`). A Redis-queue rearchitecture was built then **reverted** — do NOT reintroduce Redis without the user re-asking.
+- **Bet worker confirmed working** (2026-06-25): live `/verify` 22Bet → `found=true` + Gemini normalize; 1xBet machinery works (slow ~53s on invalid codes — `navigatesOnSubmit` timeout). Runs from a **local/residential IP**; cloud/datacenter IPs are blocked → prod sets `SYNC_CODES_ENABLED=false`.
+- **e2e suite is green** (`npm run test:e2e`) and is the merge gate.
+
+## Known landmines (read before touching auth)
+Full detail in [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md).
+1. **✅ Legacy tipster login (was P0) — RESOLVED by the phone-auth revert (2026-06-26).** `getMyTipster()` now resolves the tipster by the session cookie's `sub` (= the tipster id), and login is phone + the existing `password_hash`. All 29 prod tipsters log in with their current credentials — no `profile_id`/email backfill needed (the email-backfill migration `20260626000005` is abandoned).
+2. **Stale-feed cache trap (FIXED, keep):** Next.js persists supabase-js GET responses to `.next/cache`, so reads returned stale/empty feeds despite `dynamic='force-dynamic'`. `supabaseServer()` now uses `cache:'no-store'`; `/api/slips` also sends `Cache-Control: no-store`. Don't remove.
+3. **Hardcoded Supabase URL — FIXED:** `supabaseServer()` reads `NEXT_PUBLIC_SUPABASE_URL` from env.
+4. **RLS hardened** (migrations `0003`/`0005`): anon reads only verified/finished slips; pending codes, purchases, financials, `betslip_secrets`, `tipsters` are service-role-only. Never reintroduce `using(true)`.
+5. **Buyer identity is an unverified phone** (`x-buyer-phone` / `?buyer=`, matched to `slip_purchases.user_phone`). Anyone who knows a buyer's number could fetch their unlocked content. Acceptable for the no-login model (same risk profile as the old guest key); full strength = buyer OTP.
+6. Legacy `payments` table + `flw_ref` column are superseded by `transactions` — leave or drop later.
+
+## Don't
+- `.env` is the source of truth for live keys; `README.md` + `.env.local.example` are now aligned to ioTec (fixed 2026-06-10).
+- Don't add new tables in code without adding them to `schema.sql` (it now mirrors the live DB — keep it that way).
+- The accidental junk paths (`a`, `r.id`, `s.result`, …) were removed from the index 2026-06-10 — don't let them creep back.

@@ -1,0 +1,111 @@
+// ── Bet-code worker API ───────────────────────────────────────────
+// POST /verify { betting_site, booking_code } → scrape the loaded slip
+//   → { ok, site, code, found, matches:[{teams,league,market,pick,kickoff}],
+//       raw_text, count, screenshot_url,
+//       normalized:[{teams,homeTeam,awayTeam,market,marketLabel,pickSymbol,
+//                    pickSide,pickTeam,line,odds,kickoff,kickoffRaw,summary}],
+//       totalOdds, summary }   ← normalized/summary added by Gemini when
+//   GEMINI_API_KEY is set and the code is valid (see normalize.js). Best-effort.
+// GET  /health → { ok }
+//
+// Auth: send `x-worker-key: <WORKER_API_KEY>`. Keep this service private
+// (internal network / firewall) — it drives a real browser and should
+// never be exposed publicly without the key.
+
+import express from 'express'
+import { scrapeCode, shutdown, SHOT_DIR } from './scraper.js'
+import { getAdapter, supportedSites } from './adapters.js'
+import { normalizeSlip, normaliseEnabled } from './normalize.js'
+
+const app     = express()
+const API_KEY = process.env.WORKER_API_KEY || ''
+const PORT    = Number(process.env.PORT || 8080)
+const MAX     = Number(process.env.MAX_CONCURRENT || 2)
+
+app.use(express.json({ limit: '128kb' }))
+
+// Serve debug screenshots the scraper saves before closing each page.
+app.use('/shots', express.static(SHOT_DIR))
+
+// Absolute URL for a saved screenshot file (null when none).
+function shotUrl(req, file) {
+  if (!file) return null
+  const base = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`
+  return `${base.replace(/\/$/, '')}/shots/${file}`
+}
+
+// ── tiny concurrency gate (Chrome is heavy) ──────────────────────
+let active = 0
+const waiters = []
+const acquire = () => new Promise((resolve) => {
+  const tryRun = () => { if (active < MAX) { active++; resolve() } else waiters.push(tryRun) }
+  tryRun()
+})
+const release = () => { active = Math.max(0, active - 1); const next = waiters.shift(); if (next) next() }
+
+function authed(req, res) {
+  if (API_KEY && req.get('x-worker-key') !== API_KEY) {
+    res.status(401).json({ ok: false, error: 'unauthorized' })
+    return false
+  }
+  return true
+}
+
+app.get('/health', (_req, res) => res.json({ ok: true, active, sites: supportedSites() }))
+
+app.post('/verify', async (req, res) => {
+  if (!authed(req, res)) return
+
+  const { betting_site, booking_code } = req.body || {}
+  if (!betting_site || !booking_code) {
+    return res.status(400).json({ ok: false, error: 'betting_site and booking_code are required' })
+  }
+  if (!getAdapter(betting_site)) {
+    console.warn(`[verify] rejected — unsupported site "${betting_site}"`)
+    return res.status(400).json({ ok: false, error: `Unsupported site "${betting_site}". Supported: ${supportedSites().join(', ')}` })
+  }
+
+  await acquire()
+  const startedAt = Date.now()
+  console.log(`[verify] → site=${betting_site} code=${booking_code}`)
+  try {
+    // Preserve the code's case — some bookies (e.g. Betika "KkxPBu") use
+    // case-sensitive codes; lowercasing them would 404 the share URL. Only
+    // the site key is normalised (getAdapter lowercases it again anyway).
+    const result = await scrapeCode({ site: betting_site.toLowerCase(), code: String(booking_code).trim() })
+
+    // Gemini normalisation: rewrite the messy scraped selections into a clean
+    // machine-readable shape (canonical market, pick symbol 1/X/2, side, ISO
+    // kickoff) + summaries. Best-effort: only for valid coded slips, and any
+    // failure (no key, timeout, bad response) leaves /verify's contract intact.
+    let enrich = {}
+    if (result.found && normaliseEnabled()) {
+      try {
+        enrich = await normalizeSlip(result)
+      } catch (e) {
+        console.error('[normalize] skipped:', e?.message)
+      }
+    }
+
+    console.log(`[verify] ✓ site=${betting_site} code=${booking_code} found=${result.found} count=${result.count} (${Date.now() - startedAt}ms)`)
+    res.json({ ok: true, ...result, ...enrich, screenshot_url: shotUrl(req, result.screenshot) })
+  } catch (e) {
+    // Log the failure (the scraper already logged the exact step) + return 200
+    // with ok:false (incl. the failing `step`) so the caller can persist it.
+    console.error(`[verify] ✗ site=${betting_site} code=${booking_code} FAILED at step "${e?.step ?? '?'}" (${Date.now() - startedAt}ms): ${e?.message}`)
+    res.json({ ok: false, betting_site, booking_code, error: e?.message || 'scrape failed', step: e?.step ?? null, matches: [], raw_text: '', count: 0, screenshot_url: shotUrl(req, e?.screenshot) })
+  } finally {
+    release()
+  }
+})
+
+const server = app.listen(PORT, () => console.log(`bet-code-worker listening on :${PORT} (max ${MAX} concurrent)`))
+
+// Graceful shutdown so Chrome doesn't leak on container stop.
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, async () => {
+    server.close()
+    await shutdown()
+    process.exit(0)
+  })
+}

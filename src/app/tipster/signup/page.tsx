@@ -1,93 +1,92 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { TopBar, BottomNav } from '@/components/layout/Navigation'
-import { Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { Loader2, Lock } from 'lucide-react'
 
 export default function TipsterSignupPage() {
   const router = useRouter()
-  const [signupsOpen, setSignupsOpen] = useState<boolean | null>(null)
-  const [form,    setForm]    = useState({ name: '', username: '', phone: '', password: '', sport: '', description: '' })
+  const [f, setF] = useState({ name: '', password: '', username: '', phone: '', sport: '', description: '' })
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF(s => ({ ...s, [k]: e.target.value }))
+  const [err, setErr]         = useState('')
   const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState('')
+  // null = still checking; false = signups closed → show the closed panel.
+  const [open, setOpen] = useState<boolean | null>(null)
 
   useEffect(() => {
     fetch('/api/admin/settings')
       .then(r => r.json())
-      .then(d => setSignupsOpen(d.publicSignupsEnabled ?? false))
-      .catch(() => setSignupsOpen(false))
+      .then(d => setOpen(d.publicSignupsEnabled === true))
+      .catch(() => setOpen(false))
   }, [])
 
-  async function signup() {
-    if (!form.name || !form.phone || !form.password) { setError('Please fill in all required fields'); return }
-    setLoading(true); setError('')
-    const res  = await fetch('/api/tipster/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'signup', ...form }),
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setErr(''); setLoading(true)
+    const res = await fetch('/api/tipster/auth', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'signup', ...f }),
     })
-    const data = await res.json()
-    if (res.ok) {
-      localStorage.setItem('bf_tipster', JSON.stringify(data))
-      router.push('/tipster/dashboard')
-    } else {
-      setError(data.error ?? 'Signup failed. Please try again.')
-    }
+    const d = await res.json().catch(() => ({}))
     setLoading(false)
+    if (!res.ok) { setErr(d.error || 'Could not create tipster account'); return }
+    router.push('/tipster/dashboard'); router.refresh()
   }
 
-  if (signupsOpen === null) return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />
+  if (open === null) {
+    return (
+      <div style={shell}>
+        <Loader2 size={22} className="spin" color="var(--muted)" />
+      </div>
+    )
+  }
 
-  if (!signupsOpen) return (
-    <div className="flex flex-col min-h-screen">
-      <TopBar />
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--white)', marginBottom: 8 }}>Coming soon</div>
-        <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.7, maxWidth: 300, marginBottom: 24 }}>
-          Tipster applications are not yet open to the public. We are onboarding our first verified tipsters.
+  if (open === false) {
+    return (
+      <div style={shell}>
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+            <Lock size={28} color="var(--gold)" />
+          </div>
+          <div style={{ ...title, textAlign: 'center' }}>Signups are closed</div>
+          <div style={{ ...sub, textAlign: 'center' }}>New tipster accounts are added by the Betfluencer team. Contact the admin to get set up.</div>
+          <div style={foot}>Already a tipster? <Link href="/tipster/login" style={lnk}>Log in</Link></div>
         </div>
-        <div style={{ fontSize: 13, color: 'var(--offwhite)', background: 'var(--bg2)', border: '1px solid var(--line)', borderRadius: 12, padding: '12px 18px' }}>
-          Already have an account?{' '}
-          <span onClick={() => router.push('/tipster/login')} style={{ color: 'var(--gold)', fontWeight: 700, cursor: 'pointer' }}>Log in →</span>
-        </div>
-      </main>
-      <BottomNav />
-    </div>
-  )
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <TopBar />
-      <main style={{ flex: 1, overflowY: 'auto', padding: '20px 16px 40px' }}>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--white)', marginBottom: 4 }}>Become a tipster</div>
-          <div style={{ fontSize: 13, color: 'var(--muted)' }}>Create your channel and start earning from your picks</div>
+    <div style={shell}>
+      <form onSubmit={submit} style={card}>
+        <div style={title}>Become a tipster</div>
+        <div style={sub}>Post slips, get paid per sale</div>
+        {err && <div style={errorBox}>{err}</div>}
+        <input style={input} placeholder="Display name" value={f.name} onChange={set('name')} autoFocus />
+        <input style={input} placeholder="Username (public, e.g. enzo)" value={f.username} onChange={set('username')} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={prefix}>+256</div>
+          <input style={{ ...input, flex: 1 }} type="tel" placeholder="Mobile Money number (your login + payout)" value={f.phone} onChange={set('phone')} />
         </div>
-        {error && <div style={{ background: 'var(--red-lt)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: 'var(--red)', fontWeight: 600 }}>{error}</div>}
-        <div className="card">
-          <label className="lbl">Full name *</label>
-          <input className="inp" placeholder="e.g. John Mugisha" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={{ marginBottom: 10 }} />
-          <label className="lbl">Username *</label>
-          <input className="inp" placeholder="e.g. JohnTips" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} style={{ marginBottom: 10 }} />
-          <label className="lbl">Phone number *</label>
-          <input className="inp" placeholder="e.g. 0771234567" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} style={{ marginBottom: 10 }} />
-          <label className="lbl">Password *</label>
-          <input className="inp" type="password" placeholder="Min 8 characters" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} style={{ marginBottom: 10 }} />
-          <label className="lbl">Sport / leagues</label>
-          <input className="inp" placeholder="e.g. Premier League, UPL" value={form.sport} onChange={e => setForm(f => ({ ...f, sport: e.target.value }))} style={{ marginBottom: 10 }} />
-          <label className="lbl">Bio (optional)</label>
-          <input className="inp" placeholder="Short description for your channel" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ marginBottom: 16 }} />
-          <button className="btn-gold" onClick={signup} style={{ width: '100%' }}>
-            {loading ? <Loader2 size={16} className="spin" /> : 'Create account →'}
-          </button>
-        </div>
-        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: 'var(--muted)' }}>
-          Already have an account?{' '}
-          <span onClick={() => router.push('/tipster/login')} style={{ color: 'var(--gold)', fontWeight: 700, cursor: 'pointer' }}>Log in</span>
-        </div>
-      </main>
-      <BottomNav />
+        <input style={input} type="password" placeholder="Password (min 8, incl. a number)" value={f.password} onChange={set('password')} />
+        <input style={input} placeholder="Sport / leagues you cover" value={f.sport} onChange={set('sport')} />
+        <textarea style={{ ...input, minHeight: 64, resize: 'vertical' }} placeholder="Short bio (optional)" value={f.description} onChange={set('description')} />
+        <button style={btn} disabled={loading || f.password.length < 8 || !f.name || !f.username || f.phone.length < 7}>
+          {loading ? <Loader2 size={16} className="spin" /> : 'Create tipster account'}
+        </button>
+        <div style={foot}>Already a tipster? <Link href="/tipster/login" style={lnk}>Log in</Link></div>
+      </form>
     </div>
   )
 }
+
+const shell: React.CSSProperties = { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }
+const card: React.CSSProperties = { width: '100%', maxWidth: 400, background: 'var(--bg2)', border: '1px solid var(--line)', borderRadius: 18, padding: 24, display: 'flex', flexDirection: 'column', gap: 11 }
+const title: React.CSSProperties = { fontSize: 22, fontWeight: 800, color: 'var(--white)' }
+const sub: React.CSSProperties = { fontSize: 13, color: 'var(--muted)', marginBottom: 6 }
+const input: React.CSSProperties = { padding: '12px 14px', borderRadius: 12, background: 'var(--bg3)', border: '1px solid var(--line)', color: 'var(--white)', fontSize: 15, outline: 'none', fontFamily: 'inherit' }
+const prefix: React.CSSProperties = { display: 'flex', alignItems: 'center', padding: '0 13px', background: 'var(--bg3)', border: '1px solid var(--line)', borderRadius: 12, fontSize: 14, fontWeight: 700, color: 'var(--offwhite)' }
+const btn: React.CSSProperties = { padding: 13, borderRadius: 12, border: 'none', background: 'var(--gold)', color: '#1A1205', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }
+const foot: React.CSSProperties = { fontSize: 12, color: 'var(--muted)', textAlign: 'center', marginTop: 6 }
+const lnk: React.CSSProperties = { color: 'var(--gold)', fontWeight: 700, textDecoration: 'none' }
+const errorBox: React.CSSProperties = { background: 'var(--red-lt)', color: 'var(--red)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 10, padding: '9px 12px', fontSize: 13 }

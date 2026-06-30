@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { hashPassword, normalisePhone } from '@/lib/auth'
-import { verifyAdminToken } from '@/lib/adminAuth'
+import { requireRole } from '@/lib/auth/session'
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
 }
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdminToken(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const db = supabaseServer()
   if (!db) return NextResponse.json({ tipsters: [] })
   const { data } = await db.from('tipsters').select('id, name, username, phone, sport, description, verified, created_at').order('created_at', { ascending: false })
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdminToken(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json()
   const { name, phone, password, sport, description } = body
   if (!name || !phone || !password) return NextResponse.json({ error: 'Name, phone and password are required' }, { status: 400 })
@@ -51,16 +51,18 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!verifyAdminToken(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { id, verified } = await req.json()
+  if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { id, verified, commission_rate } = await req.json()
   const db = supabaseServer()
-  if (!db) return NextResponse.json({ error: 'Database not connected' }, { status: 500 })
-  await db.from('tipsters').update({ verified }).eq('id', id)
+  const patch: any = {}
+  if (typeof verified === 'boolean') patch.verified = verified
+  if (commission_rate !== undefined) patch.commission_rate = (commission_rate === null || commission_rate === '') ? null : Number(commission_rate)
+  if (Object.keys(patch).length) await db.from('tipsters').update(patch).eq('id', id)
   return NextResponse.json({ success: true })
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!verifyAdminToken(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await req.json()
   const db = supabaseServer()
   if (!db) return NextResponse.json({ error: 'Database not connected' }, { status: 500 })

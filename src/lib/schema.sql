@@ -24,16 +24,18 @@ create table tipsters (
 create table betslips (
   id                   uuid primary key default uuid_generate_v4(),
   tipster_id           uuid references tipsters(id) on delete cascade,
-  posting_mode         text not null check (posting_mode in ('manual','screenshot')),
-  total_odds           numeric(8,2) not null,
-  leg_count            integer not null default 1,
+  posting_mode         text not null check (posting_mode in ('manual','screenshot','booking_code')),
+  total_odds           numeric(8,2),
+  leg_count            integer,
   result               text default 'pending' check (result in ('pending','win','loss')),
   slip_price           integer not null default 1000,
   note                 text default '',
   slip_image_url       text default '',
   result_image_url     text default '',
   result_proof_pending boolean default false,
-  posted_at            timestamptz default now()
+  posted_at            timestamptz default now(),
+  betting_site         text default null,   -- booking_code mode: which bookie
+  booking_code         text default null    -- shareable bookie slip code
 );
 
 -- ── BETSLIP LEGS (manual mode) ───────────────────────────────────
@@ -57,7 +59,7 @@ create table slip_purchases (
   user_phone   text not null,
   user_name    text default '',
   amount_paid  integer not null,
-  status       text default 'active' check (status in ('active','refunded')),
+  status       text default 'pending' check (status in ('pending','active','refunded')),
   purchased_at timestamptz default now()
 );
 
@@ -88,6 +90,13 @@ create table earnings (
   plan         text not null default 'slip',
   user_phone   text not null,
   created_at   timestamptz default now()
+);
+
+-- ── PLATFORM SETTINGS ─────────────────────────────────────────────
+-- Simple key/value config (e.g. public_signups_enabled). Admin-managed.
+create table platform_settings (
+  key   text primary key,
+  value text not null
 );
 
 -- ── INDEXES ──────────────────────────────────────────────────────
@@ -180,3 +189,47 @@ values
   ('Nairobi King', 'NairobiKing', '+256700000002', crypt('demo1234', gen_salt('bf')), 'Premier League specialist since 2019.',          'Premier League only',               true,  'paid'),
   ('StatAttack',   'StatAttack',  '+256700000003', crypt('demo1234', gen_salt('bf')), 'Stats-based, consistent returns.',               'All European leagues',              false, null),
   ('BetWise UG',   'BetWiseUG',   '+256700000004', crypt('demo1234', gen_salt('bf')), 'Uganda Premier League expert.',                  'AFCON · UPL · Premier League',      false, null);
+
+-- ── TRANSACTIONS (ioTec Pay — tracks every collection/disbursement) ─
+create table transactions (
+  id                 uuid primary key default uuid_generate_v4(),
+  iotec_id           text unique,                       -- ioTec collection id (= status requestId)
+  external_id        text unique not null,              -- our reconciliation ref
+  type               text not null default 'collection' check (type in ('collection','disbursement')),
+  method             text check (method in ('momo','card')),
+  category           text default 'MobileMoney',
+  purpose            text default 'slip_purchase',
+  betslip_id         uuid references betslips(id) on delete set null,
+  tipster_id         uuid references tipsters(id) on delete set null,
+  slip_purchase_id   uuid references slip_purchases(id) on delete set null,
+  user_phone         text,
+  user_email         text,
+  payer              text,
+  amount             integer not null,
+  currency           text not null default 'UGX',
+  status             text not null default 'pending'
+                     check (status in ('pending','processing','success','failed','cancelled')),
+  iotec_status       text,
+  status_message     text,
+  card_redirect_url  text,
+  transaction_charge numeric(12,2),
+  raw                jsonb,
+  created_at         timestamptz default now(),
+  updated_at         timestamptz default now()
+);
+
+create index idx_transactions_external on transactions(external_id);
+create index idx_transactions_iotec    on transactions(iotec_id);
+create index idx_transactions_status   on transactions(status, created_at desc);
+create index idx_transactions_betslip  on transactions(betslip_id);
+
+create or replace function set_updated_at() returns trigger as $$
+begin new.updated_at = now(); return new; end;
+$$ language plpgsql;
+
+create trigger transactions_set_updated_at
+  before update on transactions
+  for each row execute function set_updated_at();
+
+alter table transactions enable row level security;
+create policy "transactions_service_only" on transactions for all using (true);
