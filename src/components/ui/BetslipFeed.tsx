@@ -57,9 +57,13 @@ function BetslipCard({ slip, tipsterName, defaultOpen = false, owned = false, on
               <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)' }}>Betslip</span>
               <span style={{ background: 'var(--bg3)', color: 'var(--muted)', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>{games} games</span>
               <span style={{ background: risk.bg, color: risk.color, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, border: `1px solid ${risk.color}40` }}>{risk.label}</span>
-              {finished
-                ? <span style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>Free</span>
-                : <span style={{ background: 'var(--green-lt)', color: 'var(--green)', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, border: '1px solid rgba(46,204,122,0.3)' }}>✓ Verified</span>}
+              {slip.result === 'win'
+                ? <span style={{ background: 'var(--green-lt)', color: 'var(--green)', fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 20, border: '1px solid rgba(46,204,122,0.45)' }}>WON ✓</span>
+                : slip.result === 'loss'
+                  ? <span style={{ background: 'var(--red-lt)', color: 'var(--red)', fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 20, border: '1px solid rgba(255,107,107,0.45)' }}>LOST ✗</span>
+                  : slip.result === 'void'
+                    ? <span style={{ background: 'var(--bg3)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20, border: '1px solid var(--line)' }}>VOID</span>
+                    : <span style={{ background: 'var(--green-lt)', color: 'var(--green)', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20, border: '1px solid rgba(46,204,122,0.3)' }}>✓ Verified</span>}
               {(unlocked || owned) && !finished && (
                 <span style={{ background: 'rgba(46,204,122,0.1)', color: 'var(--green)', fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>Unlocked ✓</span>
               )}

@@ -47,8 +47,8 @@ export default function ChannelPage() {
   )
 
   const wins    = tipster.wins_last_10 ?? 0
-  const losses  = (tipster as any).losses ?? 0
-  const settled = wins + losses
+  const losses  = tipster.losses ?? 0
+  const settled = wins + losses   // won + lost (excludes still-pending slips)
 
   return (
     <div className="flex flex-col min-h-screen">

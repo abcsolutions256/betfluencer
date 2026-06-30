@@ -24,7 +24,9 @@ export interface TipsterPublic {
   verified:         boolean
   tick_type:        TickType
   subscriber_count: number
-  wins_last_10:     number
+  wins_last_10:     number   // total slips won (despite the legacy name)
+  losses?:          number   // total slips lost
+  slips_posted?:    number   // total slips placed (won + lost + pending)
   avg_odds:         number
   score:            number
 }
