@@ -47,8 +47,9 @@ export default function ChannelPage() {
   )
 
   const wins    = tipster.wins_last_10 ?? 0
-  const losses  = (tipster as any).losses ?? 0
+  const losses  = tipster.losses ?? 0
   const settled = wins + losses
+  const placed  = tipster.slips_posted ?? settled   // total slips placed (incl. pending)
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -65,7 +66,7 @@ export default function ChannelPage() {
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>@{tipster.username} · {tipster.sport}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <WinRateBadge wins={wins} total={settled} slips={slips} />
+              <WinRateBadge wins={wins} total={placed} slips={slips} />
               <span className="pill-muted">{(tipster.subscriber_count ?? 0).toLocaleString()} fans</span>
             </div>
           </div>
