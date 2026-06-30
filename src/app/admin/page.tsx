@@ -95,6 +95,22 @@ function ReviewTab() {
     setBusyId(null)
   }
 
+  // Settle a single leg. The API re-derives the slip result from its legs, so a
+  // slip that becomes decided (any leg lost, or all legs won) drops off the list.
+  async function markLeg(slipId: string, legId: string, result: 'win' | 'loss') {
+    const res = await fetch('/api/admin/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ legId, result }),
+    })
+    const d = await res.json().catch(() => ({}))
+    setSlips(prev => prev.flatMap(s => {
+      if (s.id !== slipId) return [s]
+      if (d.slipResult && d.slipResult !== 'pending') return []   // slip now settled
+      return [{ ...s, legs: (s.legs ?? []).map((l: any) => l.id === legId ? { ...l, result } : l) }]
+    }))
+  }
+
   async function autoVerify() {
     setVerifying(true)
     await fetch('/api/verify', { method: 'POST' })
@@ -105,7 +121,7 @@ function ReviewTab() {
   return (
     <>
       <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: 'var(--offwhite)', lineHeight: 1.6 }}>
-        Pending slips awaiting settlement. Auto-verify tries the football API first; settle the rest manually.
+        Pending slips awaiting settlement. Auto-verify tries the football API first; settle the rest manually — tick whole slips (Won/Lost/Void) or individual legs (W/L), and the slip result follows the legs.
       </div>
 
       <button onClick={autoVerify} disabled={verifying} style={{ width: '100%', padding: '10px', background: 'var(--bg3)', color: 'var(--gold)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 800, cursor: 'pointer', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -132,12 +148,17 @@ function ReviewTab() {
               {slip.tipster_name ?? 'Unknown'} · {slip.booking_code ? `Code ${slip.booking_code}` : slip.posting_mode} · UGX {(slip.slip_price || 0).toLocaleString()}
             </div>
             {slip.legs?.map((leg: any, i: number) => (
-              <div key={i} style={{ fontSize: 11, color: 'var(--offwhite)', padding: '3px 0', borderTop: i > 0 ? '1px solid var(--line)' : 'none' }}>
-                {leg.match} · <span style={{ color: 'var(--gold)' }}>{leg.pick}</span>
-                {leg.result && leg.result !== 'pending' && (
-                  <span style={{ color: leg.result === 'win' ? 'var(--green)' : 'var(--red)', marginLeft: 6, fontWeight: 700 }}>
-                    {leg.result === 'win' ? '✓' : '✗'}
-                  </span>
+              <div key={leg.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: i > 0 ? '1px solid var(--line)' : 'none' }}>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 11, color: 'var(--offwhite)' }}>
+                  {leg.match} · <span style={{ color: 'var(--gold)' }}>{leg.pick}</span>
+                </div>
+                {leg.id && (
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button onClick={() => markLeg(slip.id, leg.id, 'win')} title="This leg won"
+                      style={{ padding: '3px 9px', borderRadius: 8, fontSize: 10, fontWeight: 800, cursor: 'pointer', border: `1px solid ${leg.result === 'win' ? 'var(--green)' : 'var(--line)'}`, background: leg.result === 'win' ? 'var(--green-lt)' : 'var(--bg3)', color: leg.result === 'win' ? 'var(--green)' : 'var(--muted)' }}>W</button>
+                    <button onClick={() => markLeg(slip.id, leg.id, 'loss')} title="This leg lost"
+                      style={{ padding: '3px 9px', borderRadius: 8, fontSize: 10, fontWeight: 800, cursor: 'pointer', border: `1px solid ${leg.result === 'loss' ? 'var(--red)' : 'var(--line)'}`, background: leg.result === 'loss' ? 'var(--red-lt)' : 'var(--bg3)', color: leg.result === 'loss' ? 'var(--red)' : 'var(--muted)' }}>L</button>
+                  </div>
                 )}
               </div>
             ))}

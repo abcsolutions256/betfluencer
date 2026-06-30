@@ -7,6 +7,14 @@ import { Loader2 } from 'lucide-react'
 import { resolveImageUrl } from '@/lib/imageUpload'
 import { buyerHeader } from '@/lib/guestId'
 
+// Per-leg outcome pill (settled slips). win = green, loss = red, void = grey.
+function LegResult({ r }: { r?: string }) {
+  if (r === 'win')  return <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--green)', background: 'var(--green-lt)', border: '1px solid rgba(46,204,122,0.45)', borderRadius: 20, padding: '1px 7px', whiteSpace: 'nowrap' }}>WON ✓</span>
+  if (r === 'loss') return <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--red)',   background: 'var(--red-lt)',   border: '1px solid rgba(255,107,107,0.45)', borderRadius: 20, padding: '1px 7px', whiteSpace: 'nowrap' }}>LOST ✗</span>
+  if (r === 'void') return <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--muted)', background: 'var(--bg3)', border: '1px solid var(--line)', borderRadius: 20, padding: '1px 7px', whiteSpace: 'nowrap' }}>VOID</span>
+  return null
+}
+
 export function SlipReveal({ betslipId }: { betslipId: string }) {
   const [data, setData]       = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -48,9 +56,11 @@ export function SlipReveal({ betslipId }: { betslipId: string }) {
     </div>
   ) : null
 
-  // Manual / parsed legs (e.g. a screenshot slip whose picks were parsed) —
-  // shown when there are no Gemini-normalised picks.
+  // Manual / parsed / projected legs — these carry the per-leg settlement
+  // `result` (win/loss/void), so for a settled slip we render this block to
+  // show each leg's outcome.
   const legs: any[] = Array.isArray(data.legs) ? data.legs : []
+  const anySettled = legs.some((l: any) => l.result && l.result !== 'pending')
   const legsBlock = legs.length > 0 ? (
     <div>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, padding: '10px 14px 2px', borderTop: '1px solid var(--line)' }}>
@@ -63,14 +73,16 @@ export function SlipReveal({ betslipId }: { betslipId: string }) {
             <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 1 }}>{[l.pick, l.league].filter(Boolean).join(' · ')}</div>
           </div>
           {l.odds ? <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--gold)' }}>{Number(l.odds).toFixed(2)}</div> : null}
+          <LegResult r={l.result} />
         </div>
       ))}
     </div>
   ) : null
 
-  // The match details to render alongside a code/screenshot: prefer the
-  // normalised picks, else the parsed/manual legs.
-  const details = picks ?? legsBlock
+  // Match details to render alongside a code/screenshot. For a SETTLED slip
+  // prefer the legs block (it carries each leg's win/lost); otherwise prefer the
+  // richer Gemini-normalised picks.
+  const details = anySettled ? (legsBlock ?? picks) : (picks ?? legsBlock)
 
   // Booking-code slip → the code to load on the bookie + the match details.
   if (data.booking_code) return (
