@@ -276,8 +276,14 @@ function TipstersTab() {
   }
 
   async function deleteTipster(id: string) {
-    if (!confirm('Remove this tipster?')) return
-    await fetch('/api/admin/tipsters', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    if (!confirm('Remove this tipster? This also removes their slips, purchases and earnings.')) return
+    const res = await fetch('/api/admin/tipsters', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      alert(`Could not remove tipster: ${d.error ?? 'unknown error'}`)
+      return
+    }
+    // Only drop from the list once the server confirms the delete succeeded.
     setTipsters(prev => prev.filter(t => t.id !== id))
   }
 
