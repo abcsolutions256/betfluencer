@@ -75,13 +75,17 @@ export async function POST(req: NextRequest) {
       // 3) manual legs
       if (legs.length) {
         const { error: legsError } = await db.from('betslip_legs').insert(legs.map((l: any) => ({
-          betslip_id: bs.id,
-          match:      l.match ?? '',
-          league:     l.league ?? '',
-          pick:       l.pick ?? '',
-          odds:       l.odds ? parseFloat(l.odds) : null,
-          match_time: l.match_time || null,
-          result:     'pending',
+          betslip_id:     bs.id,
+          match:          l.match ?? '',
+          league:         l.league ?? '',
+          pick:           l.pick ?? '',
+          odds:           l.odds ? parseFloat(l.odds) : null,
+          match_time:     l.match_time || null,
+          result:         'pending',
+          market:         l.market ?? null,
+          market_subject: l.market_subject ?? null,
+          side:           l.side ?? null,
+          line:           l.line != null && l.line !== '' ? Number(l.line) : null,
         })))
         if (legsError) console.error('Legs insert error:', legsError)
       }

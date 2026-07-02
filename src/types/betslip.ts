@@ -2,14 +2,17 @@ export type SlipResult  = 'pending' | 'win' | 'loss' | 'void'
 export type PostingMode = 'manual' | 'screenshot' | 'booking_code'
 
 export interface SlipLeg {
-  id:         string
-  match:      string
-  league:     string
-  pick:       string
-  odds:       number
-  match_time: string
-  result:     SlipResult
-  market?:    string
+  id:              string
+  match:           string
+  league:          string
+  pick:            string
+  odds:            number
+  match_time:      string
+  result:          SlipResult
+  market?:         string
+  market_subject?: string           // team/player the pick applies to ('match' = whole match)
+  side?:           string | null    // over | under | yes | no | home | draw | away | null
+  line?:           number | null    // numeric threshold (e.g. 0.5) or null
 }
 
 export interface Betslip {

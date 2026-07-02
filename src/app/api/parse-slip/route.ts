@@ -40,10 +40,13 @@ Return ONLY a valid JSON object with this exact structure, no other text:
     {
       "match": "Home Team vs Away Team",
       "league": "league or competition name",
-      "pick": "the selection e.g. Over 2.5 goals",
+      "pick": "fully unambiguous selection, e.g. Croatia Over 0.5 Goals",
       "odds": 1.95,
       "match_time": "YYYY-MM-DDTHH:MM:00Z or null if not visible",
-      "market": "match_result|over_under|btts|double_chance|handicap|ht_result|clean_sheet|exact_score|score_first|win_margin|total_cards|player_score|player_first|corners|asian_handicap|other"
+      "market": "match_result|match_total|team_total|btts|double_chance|draw_no_bet|handicap|asian_handicap|ht_result|ht_total|clean_sheet|exact_score|first_to_score|win_margin|total_cards|total_corners|player_to_score|other",
+      "market_subject": "the exact team or player the selection applies to, verbatim from the slip; 'match' for whole-match markets",
+      "side": "over|under|yes|no|home|draw|away|null",
+      "line": 0.5
     }
   ]
 }
@@ -51,7 +54,14 @@ Rules:
 - Extract ALL legs visible on the slip
 - The "match" field MUST be in the exact format "Home Team vs Away Team" using the real team names shown. Do not abbreviate.
 - For match_time: ALWAYS provide a full date. If the slip shows a date, use it. If it shows only a time (e.g. "Today 18:30", "20:00"), combine it with today's date provided above. Only use null if there is genuinely no time or date anywhere on the slip. Format: YYYY-MM-DDTHH:MM:00Z
-- For pick: keep it simple and standard, e.g. "Over 2.5", "Under 3.5", "Both Teams To Score", "Home Win", "Draw", "Away Win". Strip away menu labels like "Over/Under | Full Time -".
+- MARKET / SUBJECT / SIDE / LINE — read these carefully, they are the point of this task:
+  * Bookmakers write team-total markets as a multi-part label, e.g. "Over/Under | Croatia | Full Time - Over (0.5)". The MIDDLE segment (here "Croatia") is the TEAM the total applies to — it means THAT team's goals, NOT the match total. NEVER discard the team segment.
+  * If a total applies to ONE team → market="team_total", market_subject=that team (verbatim), side="over" or "under", line=the number (e.g. 0.5), and pick MUST name the team, e.g. "Croatia Over 0.5 Goals". Never output a bare "Over 0.5" for a team total.
+  * If a total applies to the WHOLE match → market="match_total", market_subject="match", side="over"/"under", line=the number, pick="Over 2.5".
+  * Match result (1X2) → market="match_result", market_subject="match", side="home"/"draw"/"away", line=null, pick="Home Win" / "Draw" / "Away Win" (or the team name + " Win").
+  * Both teams to score → market="btts", market_subject="match", side="yes"/"no", line=null, pick="Both Teams To Score" or "Both Teams To Score - No".
+  * For any other market, choose the closest market value, set market_subject to the team/player it concerns ("match" if whole-match), and set side/line to null when they do not apply.
+- For pick: it is rendered DIRECTLY to users and must be fully unambiguous and self-contained. Include the team/player name whenever the selection is about a specific team or player.
 - For odds: decimal format only (1.95 not 19/10)
 - If total_odds not shown, multiply all leg odds together
 - Return only the JSON, no markdown, no explanation` },
