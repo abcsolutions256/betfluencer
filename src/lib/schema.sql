@@ -40,14 +40,19 @@ create table betslips (
 
 -- ── BETSLIP LEGS (manual mode) ───────────────────────────────────
 create table betslip_legs (
-  id          uuid primary key default uuid_generate_v4(),
-  betslip_id  uuid references betslips(id) on delete cascade,
-  match       text not null,
-  league      text default '',
-  pick        text not null,
-  odds        numeric(5,2) not null,
-  match_time  timestamptz,
-  result      text default 'pending' check (result in ('pending','win','loss'))
+  id             uuid primary key default uuid_generate_v4(),
+  betslip_id     uuid references betslips(id) on delete cascade,
+  match          text not null,
+  league         text default '',
+  pick           text not null,
+  odds           numeric(5,2) not null,
+  match_time     timestamptz,
+  result         text default 'pending' check (result in ('pending','win','loss')),
+  fixture_id     bigint,        -- cached API-Football fixture id (cheap re-settles)
+  market         text,          -- match_result | match_total | team_total | btts | ...
+  market_subject text,          -- team/player the pick applies to ('match' = whole match)
+  side           text,          -- over | under | yes | no | home | draw | away | null
+  line           numeric(6,2)   -- numeric threshold (e.g. 0.5) or null
 );
 
 -- ── SLIP PURCHASES ───────────────────────────────────────────────

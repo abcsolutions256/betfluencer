@@ -111,8 +111,17 @@ export async function findFixture(homeTeam: string, awayTeam: string, date: stri
 // ── MARKET VERIFICATION ───────────────────────────────────────────
 export type VerifyResult = 'win' | 'loss' | 'pending' | 'unverifiable'
 
+// Structured market data captured by the screenshot parser (nullable on legacy
+// rows / booking-code legs — those fall back to grading off the pick string).
+export interface LegMeta {
+  market?:         string | null
+  market_subject?: string | null
+  side?:           string | null
+  line?:           number | string | null
+}
+
 // Verify by fixture object (already fetched)
-export function verifyLegAgainstFixture(pick: string, fixture: any): VerifyResult {
+export function verifyLegAgainstFixture(pick: string, fixture: any, meta?: LegMeta): VerifyResult {
   const status = fixture.fixture?.status?.short
   if (!['FT','AET','PEN'].includes(status)) return 'pending'
 
@@ -124,25 +133,30 @@ export function verifyLegAgainstFixture(pick: string, fixture: any): VerifyResul
   const home       = fixture.teams?.home?.name ?? ''
   const away       = fixture.teams?.away?.name ?? ''
 
-  return determineResult(pick.toLowerCase().trim(), { homeGoals, awayGoals, totalGoals, htHome, htAway, home, away, fixture })
+  return determineResult(pick.toLowerCase().trim(), { homeGoals, awayGoals, totalGoals, htHome, htAway, home, away, fixture }, meta)
 }
 
 export interface LegVerifyResult { result: VerifyResult; fixtureId: number | null }
 
 export async function verifyLeg(leg: {
-  match:       string
-  pick:        string
-  match_time:  string | null
-  fixture_id?: number | string | null
+  match:           string
+  pick:            string
+  match_time:      string | null
+  fixture_id?:     number | string | null
+  market?:         string | null
+  market_subject?: string | null
+  side?:           string | null
+  line?:           number | string | null
 }, cache?: FixtureCache): Promise<LegVerifyResult> {
   const toId = (v: any) => (typeof v === 'number' ? v : v ? Number(v) || null : null)
+  const meta: LegMeta = { market: leg.market, market_subject: leg.market_subject, side: leg.side, line: leg.line }
   try {
     // If we already stored a fixture_id, verify directly by ID (most reliable
     // and quota-light — works for older matches the date window can't reach).
     if (leg.fixture_id) {
       const fixture = await getFixtureById(leg.fixture_id)
       if (!fixture) return { result: 'pending', fixtureId: toId(leg.fixture_id) }
-      return { result: verifyLegAgainstFixture(leg.pick, fixture), fixtureId: fixture.fixture?.id ?? toId(leg.fixture_id) }
+      return { result: verifyLegAgainstFixture(leg.pick, fixture, meta), fixtureId: fixture.fixture?.id ?? toId(leg.fixture_id) }
     }
 
     // Otherwise resolve by teams + date
@@ -161,7 +175,7 @@ export async function verifyLeg(leg: {
 
     // Capture the resolved id so the caller can persist it → next run settles
     // this leg by ID (cheap + works even once it drops out of the date window).
-    return { result: verifyLegAgainstFixture(leg.pick, fixture), fixtureId: fixture.fixture?.id ?? null }
+    return { result: verifyLegAgainstFixture(leg.pick, fixture, meta), fixtureId: fixture.fixture?.id ?? null }
   } catch (err) {
     console.error('verifyLeg error:', err)
     return { result: 'unverifiable', fixtureId: null }
@@ -171,13 +185,39 @@ export async function verifyLeg(leg: {
 function determineResult(pick: string, data: {
   homeGoals: number; awayGoals: number; totalGoals: number
   htHome: number; htAway: number; home: string; away: string; fixture: any
-}): VerifyResult {
+}, meta?: LegMeta): VerifyResult {
   const { homeGoals, awayGoals, totalGoals, htHome, htAway, home, away } = data
 
   // betPawa "1X2 1UP" settles the instant the pick goes one goal ahead — a team
   // can lead 1-0, lose 1-2, and the bet still WON. The final score can't grade
   // it, so never auto-settle; leave it for an admin to settle manually.
   if (/\b1\s*up\b/.test(pick)) return 'unverifiable'
+
+  // TEAM TOTAL — "Croatia Over 0.5 Goals" means CROATIA's goals, not the match
+  // total. Must run BEFORE the generic over/under below (which uses totalGoals
+  // and would otherwise mis-grade this). Grades off the subject team's goals.
+  if (meta?.market === 'team_total') {
+    const subject = meta.market_subject ?? ''
+    // Line: prefer the parsed field, else pull the first number out of the pick.
+    const rawLine = meta.line != null && meta.line !== '' ? Number(meta.line)
+      : (pick.match(/(\d+\.?\d*)/)?.[1] ? parseFloat(pick.match(/(\d+\.?\d*)/)![1]) : NaN)
+    // Side: prefer the parsed field, else infer from the pick text.
+    let side = (meta.side ?? '').toLowerCase()
+    if (side !== 'over' && side !== 'under') {
+      if (pick.includes('over'))  side = 'over'
+      else if (pick.includes('under')) side = 'under'
+    }
+    // Resolve the subject to home or away (must be unambiguous).
+    const isHome = subject ? teamsMatch(home, subject) : false
+    const isAway = subject ? teamsMatch(away, subject) : false
+    if (!subject || Number.isNaN(rawLine) || (side !== 'over' && side !== 'under') || isHome === isAway) {
+      return 'unverifiable'   // can't confidently grade → leave for manual settle
+    }
+    const teamGoals = isHome ? homeGoals : awayGoals
+    return side === 'over'
+      ? (teamGoals > rawLine ? 'win' : 'loss')
+      : (teamGoals < rawLine ? 'win' : 'loss')
+  }
 
   const overMatch = pick.match(/over\s+(\d+\.?\d*)/)
   if (overMatch) {
@@ -288,6 +328,7 @@ function determineResult(pick: string, data: {
 // next leg checks it — legs sharing a date then cost a single request.
 export async function verifySlip(legs: {
   id: string; match: string; pick: string; match_time: string | null; fixture_id?: number | string | null
+  market?: string | null; market_subject?: string | null; side?: string | null; line?: number | string | null
 }[], cache?: FixtureCache): Promise<{ id: string; result: VerifyResult; fixtureId: number | null }[]> {
   const c = cache ?? new Map<string, any[]>()
   const results: { id: string; result: VerifyResult; fixtureId: number | null }[] = []
