@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
         active: c.active, payments_enabled: c.payments_enabled,
         tipsters: 0, purchases: 0, commission: 0, gross: 0,
       }]))
-      for (const codes of codesByTipster.values())
+      for (const codes of Array.from(codesByTipster.values()))
         for (const code of codes) { const a = agg.get(code); if (a) a.tipsters += 1 }
       for (const p of purch.data ?? [])
         for (const code of codesByTipster.get(p.tipster_id) ?? []) { const a = agg.get(code); if (a) a.purchases += 1 }

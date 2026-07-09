@@ -13,7 +13,7 @@ const REMEMBER_MAX_AGE = 60 * 60 * 24 * 180 // 180 days
 
 /** 'UG' → 🇺🇬 (regional-indicator pair). */
 function flag(code: string): string {
-  return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1f1e6 + c.charCodeAt(0) - 65))
+  return String.fromCodePoint(...code.toUpperCase().split('').map(c => 0x1f1e6 + c.charCodeAt(0) - 65))
 }
 
 export default function CountryPicker({ countries }: { countries: Country[] }) {
