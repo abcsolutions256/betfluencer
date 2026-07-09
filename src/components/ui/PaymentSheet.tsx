@@ -6,6 +6,7 @@ import {
 import type { PaymentMethod, PaymentResult, TxnStatus } from '@/types/payments'
 import { isTerminal } from '@/types/payments'
 import { buyerHeader, setBuyerPhone } from '@/lib/guestId'
+import { useCountry } from '@/components/CountryProvider'
 
 interface Props {
   open:         boolean
@@ -29,6 +30,7 @@ const phoneDigits = (v: string) => v.replace(/\D/g, '')
 export function PaymentSheet({
   open, amount, betslipId, tipsterName, slipLabel, onDone, onClose,
 }: Props) {
+  const { fmtMoney } = useCountry()
   const [mounted, setMounted] = useState(false)        // drives slide-up transition
   const [state,   setState]   = useState<SheetState>('form')
   const [method,  setMethod]  = useState<PaymentMethod>('momo')
@@ -172,7 +174,7 @@ export function PaymentSheet({
 
   if (!open) return null
 
-  const fmt = `UGX ${amount.toLocaleString()}`
+  const fmt = fmtMoney(amount)
 
   return (
     <div

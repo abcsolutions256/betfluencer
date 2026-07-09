@@ -6,7 +6,7 @@ import { ResultPill } from '@/components/ui'
 import { ImageUpload } from '@/components/ui/ImageUpload'
 import type { Tipster } from '@/types'
 import type { SlipLeg } from '@/types/betslip'
-import { BETTING_SITES } from '@/lib/bettingSites'
+import { useCountry } from '@/components/CountryProvider'
 
 type DTab = 'home'|'post'|'myslips'|'earn'|'stats'|'profile'
 
@@ -50,6 +50,8 @@ type Earning = {
 
 export default function TipsterDashboard() {
   const router = useRouter()
+  // Active market: currency label + betting-site order (all sites stay listed).
+  const { country, fmtMoney, sites } = useCountry()
   const [tab, setTab] = useState<DTab>('home')
   const [tipster, setTipster] = useState<Tipster | null>(null)
   const [stats, setStats] = useState<Stats>({ subscriber_count:0, wins_last_10:0, avg_odds:0, rank:0, total_earned:0, slips_posted:0 })
@@ -289,7 +291,7 @@ export default function TipsterDashboard() {
                         : b.locked
                           ? <>Code: <span style={{ color: 'var(--gold)', fontWeight: 700 }}>🔒 hidden until sold</span> · </>
                           : ''}
-                      UGX {(b.slip_price || 0).toLocaleString()}
+                      {fmtMoney(b.slip_price || 0)}
                     </div>
                   </div>
                   <ResultPill result={b.result as any} />
@@ -357,7 +359,7 @@ export default function TipsterDashboard() {
                         ))}
                       </div>
                     )}
-                    <label className="lbl" style={{ color: 'var(--gold)' }}>Price (UGX)</label>
+                    <label className="lbl" style={{ color: 'var(--gold)' }}>Price ({country.currency_code})</label>
                     <input className="inp" type="number" value={ss.slip_price || ''} onChange={e => updateScreenshotSlip(si, 'slip_price', parseInt(e.target.value) || 0)} />
                     <label className="lbl">Note (optional)</label>
                     <input className="inp" value={ss.note} onChange={e => updateScreenshotSlip(si, 'note', e.target.value)} />
@@ -386,12 +388,12 @@ export default function TipsterDashboard() {
                       )}
                     </div>
                     <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
-                      <label className="lbl" style={{ color: 'var(--gold)' }}>Price (UGX)</label>
+                      <label className="lbl" style={{ color: 'var(--gold)' }}>Price ({country.currency_code})</label>
                       <input className="inp" type="number" placeholder="e.g. 1500" value={slip.slip_price || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, slip_price: parseInt(e.target.value) || 0 } : sl))} />
                     </div>
                     <label className="lbl">Betting site</label>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
-                      {BETTING_SITES.map(site => (
+                      {sites.map(site => (
                         <button key={site} type="button" onClick={() => setSlips(s => s.map((sl, i) => i === si ? { ...sl, betting_site: site } : sl))} style={{ padding: '8px 4px', borderRadius: 10, border: slip.betting_site === site ? '2px solid var(--gold)' : '1px solid var(--line)', background: slip.betting_site === site ? 'var(--gold-lt)' : 'var(--bg3)', color: slip.betting_site === site ? 'var(--gold)' : 'var(--offwhite)', fontSize: 11, fontWeight: slip.betting_site === site ? 700 : 500, cursor: 'pointer' }}>{site}</button>
                       ))}
                     </div>
@@ -439,7 +441,7 @@ export default function TipsterDashboard() {
                 <div className="flex justify-between items-center" style={{ marginBottom: norm.length ? 10 : 0 }}>
                   <div>
                     <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site || 'Slip'} · {b.leg_count ?? b.game_count ?? norm.length} legs · ×{b.total_odds ?? '—'}</div>
-                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700, letterSpacing:1 }}>{b.booking_code || '—'}</span> · UGX {(b.slip_price||0).toLocaleString()}</div>
+                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700, letterSpacing:1 }}>{b.booking_code || '—'}</span> · {fmtMoney(b.slip_price||0)}</div>
                     <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>{b.posted_at ? new Date(b.posted_at).toLocaleDateString() : ''}</div>
                   </div>
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5 }}>
@@ -484,9 +486,9 @@ export default function TipsterDashboard() {
             <div className="section-label">This month</div>
             <div className="card" style={{ padding: '6px 16px', marginBottom: 14 }}>
               {[
-                { label: 'Gross collected',    val: `UGX ${thisMonthGross.toLocaleString()}`,                   color: 'var(--offwhite)' },
-                { label: 'Platform fee (10%)', val: `− UGX ${Math.round(thisMonthGross * 0.1).toLocaleString()}`, color: 'var(--muted)'    },
-                { label: 'Sent to your MoMo',  val: `UGX ${thisMonthNet.toLocaleString()}`,                      color: 'var(--green)'    },
+                { label: 'Gross collected',    val: fmtMoney(thisMonthGross),                          color: 'var(--offwhite)' },
+                { label: 'Platform fee (10%)', val: `− ${fmtMoney(Math.round(thisMonthGross * 0.1))}`, color: 'var(--muted)'    },
+                { label: 'Sent to your MoMo',  val: fmtMoney(thisMonthNet),                            color: 'var(--green)'    },
               ].map((r, i) => (
                 <div key={r.label} className="flex justify-between py-3" style={{ borderBottom: i < 2 ? '1px solid var(--line)' : 'none' }}>
                   <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{r.label}</span>
@@ -503,7 +505,7 @@ export default function TipsterDashboard() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--offwhite)' }}>Slip purchase</div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{new Date(e.created_at).toLocaleString()}</div>
                   </div>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--green)' }}>+UGX {(e.amount || 0).toLocaleString()}</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--green)' }}>+{fmtMoney(e.amount || 0)}</span>
                 </div>
               ))}
             </div>
@@ -528,7 +530,7 @@ export default function TipsterDashboard() {
             </div>
             <div className="section-label">All-time earnings</div>
             <div className="card" style={{ textAlign: 'center', padding: '20px 16px' }}>
-              <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--green)' }}>UGX {totalEarned.toLocaleString()}</div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--green)' }}>{fmtMoney(totalEarned)}</div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Total sent to your Mobile Money</div>
             </div>
           </>
