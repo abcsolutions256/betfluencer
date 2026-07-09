@@ -89,6 +89,12 @@ export function subdomainCode(host: string): string | null {
 const CACHE_TTL_MS = 60_000
 let cache: { at: number; rows: Country[] } | null = null
 
+/** Drop the cached rows (admin just toggled a market). Only clears THIS
+ *  runtime's cache — the edge middleware refreshes within CACHE_TTL_MS. */
+export function invalidateCountryCache(): void {
+  cache = null
+}
+
 /**
  * All countries from the DB via Supabase REST (edge-safe). On ANY
  * failure — missing env, table not yet migrated, network error — falls

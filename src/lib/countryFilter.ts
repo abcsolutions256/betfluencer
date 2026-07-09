@@ -6,7 +6,7 @@
 // (not yet migrated, transient error), UG falls back to UNFILTERED —
 // exactly the pre-expansion behaviour — while any other market fails
 // closed (empty list beats showing another market's content).
-import { DEFAULT_COUNTRY } from './country'
+import { DEFAULT_COUNTRY, normalizeCode } from './country'
 
 type Db = ReturnType<typeof import('./supabase').supabaseServer>
 
@@ -36,6 +36,19 @@ export function filterByTipsterIds<T extends Record<string, any>>(
 ): T[] {
   if (ids === null) return rows
   return rows.filter(r => ids.has(r[key]))
+}
+
+/**
+ * Admin market switcher: tipster-id filter from an optional `?market=XX`
+ * query param. `null` = no param = "All markets" (today's behaviour).
+ * Deliberately NOT `?country=` — that param is the public dev override
+ * and the middleware persists it to a visitor cookie.
+ */
+export async function marketFilterFromRequest(db: Db, req: Request): Promise<Set<string> | null> {
+  let code: string | null = null
+  try { code = normalizeCode(new URL(req.url).searchParams.get('market')) } catch { /* opaque URL */ }
+  if (!code) return null
+  return tipsterIdsForCountry(db, code)
 }
 
 /** Best-effort link of a tipster to a market (used at signup / by admin). */

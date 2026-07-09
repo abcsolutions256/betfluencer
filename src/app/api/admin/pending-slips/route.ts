@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireRole } from '@/lib/auth/session'
+import { marketFilterFromRequest, filterByTipsterIds } from '@/lib/countryFilter'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -11,12 +12,13 @@ export const fetchCache = 'force-no-store'
 // onto Supabase Auth in the stag merge). Admin-only via requireRole('admin');
 // runs under the service role so it can read betslip_secrets (booking_code /
 // betting_site moved off betslips into betslip_secrets by migration 0005).
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   if (!(await requireRole('admin'))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const db = supabaseServer()
+  const marketIds = await marketFilterFromRequest(db, req)   // ?market=XX → that market only
 
   // Pull recent slips, then filter in JS so settled ones (win/loss/void)
   // are unambiguously excluded — avoids any .or() filter quirks.
@@ -30,10 +32,14 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ slips: [], error: error.message }, { status: 500 })
   }
 
-  const pendingOnly = (slips ?? []).filter((s: any) => {
-    const r = (s.result ?? 'pending')
-    return r === 'pending' || r === null
-  })
+  const pendingOnly = filterByTipsterIds(
+    (slips ?? []).filter((s: any) => {
+      const r = (s.result ?? 'pending')
+      return r === 'pending' || r === null
+    }),
+    marketIds,
+    'tipster_id'
+  )
 
   const formatted = pendingOnly.map((s: any) => {
     // betslip_secrets is one-to-one (betslip_id PK); PostgREST may embed it as

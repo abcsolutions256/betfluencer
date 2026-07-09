@@ -14,7 +14,21 @@ export async function GET(req: NextRequest) {
   const db = supabaseServer()
   if (!db) return NextResponse.json({ tipsters: [] })
   const { data } = await db.from('tipsters').select('id, name, username, phone, sport, description, verified, created_at').order('created_at', { ascending: false })
-  return NextResponse.json({ tipsters: data ?? [] })
+
+  // Attach each tipster's markets (best-effort — [] if the link table is
+  // unreadable) so the admin panel can show/edit country membership.
+  const codesByTipster = new Map<string, string[]>()
+  try {
+    const { data: links } = await db.from('tipster_countries').select('tipster_id, country_code')
+    for (const l of links ?? []) {
+      const arr = codesByTipster.get(l.tipster_id) ?? []
+      arr.push(l.country_code)
+      codesByTipster.set(l.tipster_id, arr)
+    }
+  } catch { /* pre-migration DB — countries column just renders empty */ }
+
+  const tipsters = (data ?? []).map(t => ({ ...t, countries: codesByTipster.get(t.id) ?? [] }))
+  return NextResponse.json({ tipsters })
 }
 
 export async function POST(req: NextRequest) {
@@ -61,12 +75,24 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { id, verified, commission_rate } = await req.json()
+  const { id, verified, commission_rate, countries } = await req.json()
   const db = supabaseServer()
   const patch: any = {}
   if (typeof verified === 'boolean') patch.verified = verified
   if (commission_rate !== undefined) patch.commission_rate = (commission_rate === null || commission_rate === '') ? null : Number(commission_rate)
   if (Object.keys(patch).length) await db.from('tipsters').update(patch).eq('id', id)
+
+  // Replace the tipster's market membership. At least one market is
+  // required — an unlinked tipster would be invisible everywhere.
+  if (Array.isArray(countries)) {
+    const codes = Array.from(new Set(countries.map(c => normalizeCode(c)).filter(Boolean))) as string[]
+    if (codes.length === 0) return NextResponse.json({ error: 'A tipster must belong to at least one market' }, { status: 400 })
+    const { error: delErr } = await db.from('tipster_countries').delete().eq('tipster_id', id)
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+    const { error: insErr } = await db.from('tipster_countries').insert(codes.map(c => ({ tipster_id: id, country_code: c })))
+    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
+  }
+
   return NextResponse.json({ success: true })
 }
 
