@@ -141,6 +141,14 @@ export function PaymentSheet({
         return
       }
 
+      // Instant success — the free-unlock flow on markets without live
+      // payments resolves synchronously; no phone prompt, nothing to poll.
+      if (data.status === 'success') {
+        setMessage(data.message || '')
+        setState('success')
+        return
+      }
+
       setExtId(data.external_id)
       if (data.card_redirect_url) {
         window.open(data.card_redirect_url, '_blank')

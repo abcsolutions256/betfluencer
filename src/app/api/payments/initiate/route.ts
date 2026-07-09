@@ -14,6 +14,7 @@ import { collect } from '@/lib/iotec'
 import { createTransaction, updateTransaction } from '@/lib/transactions'
 import { normalizeIotecStatus, MIN_AMOUNT_UGX } from '@/types/payments'
 import type { PaymentResult } from '@/types/payments'
+import { getActiveCountry } from '@/lib/country'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,8 +45,15 @@ export async function POST(req: NextRequest) {
   const { data: tipster } = await db.from('tipsters').select('id, name, phone').eq('id', betslip.tipster_id).single()
   if (!tipster) return NextResponse.json({ error: 'Tipster not found' }, { status: 404 })
 
+  // Market payment mode: Uganda (payments_enabled) charges via ioTec exactly
+  // as before; other markets run the FREE/stub unlock below until a real
+  // processor (Paystack / Flutterwave / M-Pesa) is wired per country.
+  const country = await getActiveCountry(req)
+
   const amount = betslip.slip_price
-  if (amount < MIN_AMOUNT_UGX) return NextResponse.json({ error: 'Minimum payment is UGX 500' }, { status: 400 })
+  // ioTec's minimum collection — only meaningful when we actually charge.
+  if (country.payments_enabled && amount < MIN_AMOUNT_UGX)
+    return NextResponse.json({ error: 'Minimum payment is UGX 500' }, { status: 400 })
 
   // Resolve the payer for ioTec (phone for momo, email for card).
   let user_phone: string | null, user_email: string | null, payerForIotec: string
@@ -121,6 +129,26 @@ export async function POST(req: NextRequest) {
 
   // 3) Link the transaction to the purchase so fulfillment can unlock it.
   await updateTransaction(txn.id, { slip_purchase_id: purchaseId })
+
+  // ── FREE/stub unlock (payments_enabled = false markets only) ──────
+  // The purchase + transaction rows above are identical to the paid flow
+  // (auditable in admin), but nothing is charged: mark the transaction a
+  // succeeded zero-collection and activate the purchase immediately.
+  // No earning / tipster-payout rows — no money moved, nothing to
+  // disburse — and fulfillTransaction()'s already-active guard keeps any
+  // later status poll a no-op. Uganda NEVER enters this branch.
+  if (!country.payments_enabled) {
+    const note = `Free unlock — ${country.name} payments not live yet`
+    await db.from('slip_purchases').update({ status: 'active', amount_paid: 0 }).eq('id', purchaseId)
+    await updateTransaction(txn.id, {
+      status: 'success',
+      currency: country.currency_code as any,
+      status_message: note,
+    })
+    return NextResponse.json({
+      transaction_id: txn.id, external_id, status: 'success', message: note,
+    } as PaymentResult)
+  }
 
   const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/pay/return?ext=${external_id}`
   const res = await collect({ amount, payer: payerForIotec, externalId: external_id, payerName: payer_name, payerNote: 'Betfluencer slip purchase', redirectUrl })
