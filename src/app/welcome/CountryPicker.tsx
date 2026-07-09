@@ -50,7 +50,6 @@ export default function CountryPicker({ countries }: { countries: Country[] }) {
 
       {/* ── Hero ── */}
       <div style={{ textAlign: 'center', padding: '52px 0 28px' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>⚽</div>
         <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--white)', letterSpacing: -0.5, marginBottom: 10 }}>
           bet<span style={{ color: 'var(--gold)' }}>fluencer</span>
         </div>
