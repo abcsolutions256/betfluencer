@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import { getActiveCountry } from '@/lib/country'
+import { tipsterIdsForCountry, filterByTipsterIds } from '@/lib/countryFilter'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
 
-export async function GET(_: Request, { params }: { params: { slug: string } }) {
+export async function GET(req: Request, { params }: { params: { slug: string } }) {
   const db = supabaseServer()
   const id = params.slug
+  const country = await getActiveCountry(req)
+  const marketIds = await tipsterIdsForCountry(db, country.code)
 
   // Read the SAME view every other page uses, so numbers match everywhere.
   const [statRes, purchasesRes, earningsRes, slipsRes, rankRes] = await Promise.all([
@@ -21,8 +25,9 @@ export async function GET(_: Request, { params }: { params: { slug: string } }) 
   const stat = statRes.data ?? {}
   const buyers = new Set((purchasesRes.data ?? []).map((p: any) => p.user_phone)).size
 
-  // Rank by the same score used on the rankings page: wins * avg_odds
-  const rankList = (rankRes.data ?? [])
+  // Rank by the same score used on the rankings page: wins * avg_odds —
+  // against the ACTIVE market's peer set, matching the rankings page.
+  const rankList = filterByTipsterIds(rankRes.data ?? [], marketIds)
     .map((r: any) => ({ id: r.id, score: (r.wins_last_10 ?? 0) * (r.avg_odds || 1) }))
     .sort((a, b) => b.score - a.score)
   const rank = rankList.findIndex((r: any) => r.id === id) + 1

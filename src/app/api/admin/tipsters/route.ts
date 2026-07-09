@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { hashPassword, normalisePhone } from '@/lib/auth'
 import { requireRole } from '@/lib/auth/session'
+import { getActiveCountry, normalizeCode } from '@/lib/country'
+import { linkTipsterToCountry } from '@/lib/countryFilter'
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
@@ -47,6 +49,13 @@ export async function POST(req: NextRequest) {
     console.error('Tipster insert error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  // Place the new tipster in a market or they'd be invisible everywhere:
+  // an explicit body.country (admin market switcher) wins, else the
+  // market the admin panel is being viewed on (UG by default).
+  const countryCode = normalizeCode(body.country) ?? (await getActiveCountry(req)).code
+  await linkTipsterToCountry(db, tipster.id, countryCode)
+
   return NextResponse.json({ success: true, tipster: { id: tipster.id, name: tipster.name, username: tipster.username, phone: normPhone, password } })
 }
 
