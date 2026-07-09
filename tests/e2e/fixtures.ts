@@ -66,9 +66,12 @@ export async function postManualSlip(
 
   // Price (the gold-boxed input with placeholder "e.g. 1500").
   await page.getByPlaceholder('e.g. 1500').fill(String(opts.price))
-  // Total odds + legs.
-  await page.getByPlaceholder('e.g. 12.40').fill(opts.odds)
-  await page.getByPlaceholder('e.g. 4').fill(opts.legCount)
+  // Total odds + legs. Since the 2026-07-02 form change these are the two
+  // optional "Auto from code" inputs (odds first, then leg count) — normally
+  // left blank for a coded slip; manual specs still set them explicitly.
+  const autoInputs = page.getByPlaceholder('Auto from code')
+  await autoInputs.first().fill(opts.odds)
+  await autoInputs.nth(1).fill(opts.legCount)
   if (opts.note) {
     // The note input is the last bare .inp; target by its row order via label.
     await page.getByPlaceholder('e.g. ABC123').first().waitFor()
