@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { usePayment } from '@/hooks/usePayment'
+import { useCountry } from '@/components/CountryProvider'
 
 interface Props {
   betslipId:    string
@@ -21,6 +22,7 @@ export function BuySlipButton({
   betslipId, amount, tipsterName, slipLabel, onUnlocked, className,
 }: Props) {
   const { pay, sheet } = usePayment()
+  const { fmtMoney } = useCountry()
   const [busy, setBusy] = useState(false)
 
   async function handleClick(e: React.MouseEvent) {
@@ -52,7 +54,7 @@ export function BuySlipButton({
       >
         {busy
           ? <Loader2 size={16} className="spin" />
-          : <>🔓 Unlock — UGX {amount.toLocaleString()}</>}
+          : <>🔓 Unlock — {fmtMoney(amount)}</>}
       </button>
       {sheet}
     </>

@@ -1,12 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Plus, Send, Wallet, BarChart2, User, Home, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Send, Wallet, BarChart2, User, Home, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { ResultPill } from '@/components/ui'
 import { ImageUpload } from '@/components/ui/ImageUpload'
 import type { Tipster } from '@/types'
 import type { SlipLeg } from '@/types/betslip'
-import { BETTING_SITES } from '@/lib/bettingSites'
+import { useCountry } from '@/components/CountryProvider'
 
 type DTab = 'home'|'post'|'myslips'|'earn'|'stats'|'profile'
 
@@ -50,7 +50,10 @@ type Earning = {
 
 export default function TipsterDashboard() {
   const router = useRouter()
+  // Active market: currency label + betting-site order (all sites stay listed).
+  const { country, fmtMoney, sites } = useCountry()
   const [tab, setTab] = useState<DTab>('home')
+  const [openSlipId, setOpenSlipId] = useState<string | null>(null)   // My Slips: expanded card
   const [tipster, setTipster] = useState<Tipster | null>(null)
   const [stats, setStats] = useState<Stats>({ subscriber_count:0, wins_last_10:0, avg_odds:0, rank:0, total_earned:0, slips_posted:0 })
   const [betslips, setBetslips] = useState<Betslip[]>([])
@@ -289,7 +292,7 @@ export default function TipsterDashboard() {
                         : b.locked
                           ? <>Code: <span style={{ color: 'var(--gold)', fontWeight: 700 }}>🔒 hidden until sold</span> · </>
                           : ''}
-                      UGX {(b.slip_price || 0).toLocaleString()}
+                      {fmtMoney(b.slip_price || 0)}
                     </div>
                   </div>
                   <ResultPill result={b.result as any} />
@@ -357,7 +360,7 @@ export default function TipsterDashboard() {
                         ))}
                       </div>
                     )}
-                    <label className="lbl" style={{ color: 'var(--gold)' }}>Price (UGX)</label>
+                    <label className="lbl" style={{ color: 'var(--gold)' }}>Price ({country.currency_code})</label>
                     <input className="inp" type="number" value={ss.slip_price || ''} onChange={e => updateScreenshotSlip(si, 'slip_price', parseInt(e.target.value) || 0)} />
                     <label className="lbl">Note (optional)</label>
                     <input className="inp" value={ss.note} onChange={e => updateScreenshotSlip(si, 'note', e.target.value)} />
@@ -386,12 +389,12 @@ export default function TipsterDashboard() {
                       )}
                     </div>
                     <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
-                      <label className="lbl" style={{ color: 'var(--gold)' }}>Price (UGX)</label>
+                      <label className="lbl" style={{ color: 'var(--gold)' }}>Price ({country.currency_code})</label>
                       <input className="inp" type="number" placeholder="e.g. 1500" value={slip.slip_price || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, slip_price: parseInt(e.target.value) || 0 } : sl))} />
                     </div>
                     <label className="lbl">Betting site</label>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
-                      {BETTING_SITES.map(site => (
+                      {sites.map(site => (
                         <button key={site} type="button" onClick={() => setSlips(s => s.map((sl, i) => i === si ? { ...sl, betting_site: site } : sl))} style={{ padding: '8px 4px', borderRadius: 10, border: slip.betting_site === site ? '2px solid var(--gold)' : '1px solid var(--line)', background: slip.betting_site === site ? 'var(--gold-lt)' : 'var(--bg3)', color: slip.betting_site === site ? 'var(--gold)' : 'var(--offwhite)', fontSize: 11, fontWeight: slip.betting_site === site ? 700 : 500, cursor: 'pointer' }}>{site}</button>
                       ))}
                     </div>
@@ -431,16 +434,22 @@ export default function TipsterDashboard() {
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--white)', marginBottom: 14 }}>My slips</div>
             {betslips.length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '40px 0' }}>No slips posted yet</div>}
             {betslips.map((b: any) => {
-              const norm: any[] = Array.isArray(b.normalized) ? b.normalized : []
+              // Picks: prefer the bookie-verified selections; fall back to the
+              // slip's own stored legs (screenshot/manual posts) so every slip
+              // can show its picks, not just verified coded ones.
+              const norm: any[] = Array.isArray(b.normalized) && b.normalized.length
+                ? b.normalized
+                : (Array.isArray(b.legs) ? b.legs.map((l: any) => ({ teams: l.match, marketLabel: l.market ?? null, pickSymbol: l.pick, odds: l.odds, kickoff: l.kickoff ?? null })) : [])
               const v = VERIF[b.verification_status as string] || VERIF.pending
               const fmtKO = (iso?: string) => iso ? new Date(iso).toLocaleString('en-UG', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : ''
+              const open = openSlipId === b.id
+              const hasDetails = !!(b.booking_code || norm.length || b.slip_image_url)
               return (
               <div key={b.id} className="card" style={{ marginBottom:8, borderLeft:`3px solid ${b.result==='win'?'var(--green)':b.result==='loss'?'var(--red)':'var(--line)'}` }}>
-                <div className="flex justify-between items-center" style={{ marginBottom: norm.length ? 10 : 0 }}>
+                <div className="flex justify-between items-center">
                   <div>
                     <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site || 'Slip'} · {b.leg_count ?? b.game_count ?? norm.length} legs · ×{b.total_odds ?? '—'}</div>
-                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>Code: <span style={{ color:'var(--gold)', fontWeight:700, letterSpacing:1 }}>{b.booking_code || '—'}</span> · UGX {(b.slip_price||0).toLocaleString()}</div>
-                    <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>{b.posted_at ? new Date(b.posted_at).toLocaleDateString() : ''}</div>
+                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{fmtMoney(b.slip_price||0)}{b.posted_at ? ` · ${new Date(b.posted_at).toLocaleDateString()}` : ''}</div>
                   </div>
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5 }}>
                     {b.posting_mode === 'booking_code' && <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, color:v.color, background:v.bg, whiteSpace:'nowrap' }}>{v.label}</span>}
@@ -448,22 +457,42 @@ export default function TipsterDashboard() {
                     <ResultPill result={b.result as any} />
                   </div>
                 </div>
-                {/* Owner-only: the verified picks (markets, teams, 1/X/2, kickoff). */}
-                {norm.length > 0 && (
-                  <div style={{ borderTop:'1px solid var(--line)', paddingTop:8, display:'flex', flexDirection:'column', gap:7 }}>
-                    {norm.map((leg, i) => (
-                      <div key={i} style={{ fontSize:11.5, lineHeight:1.45 }}>
-                        <div style={{ color:'var(--white)', fontWeight:700 }}>{leg.teams || `${leg.homeTeam ?? '?'} vs ${leg.awayTeam ?? '?'}`}</div>
-                        <div style={{ color:'var(--muted)' }}>
-                          <span style={{ color:'var(--gold)', fontWeight:700 }}>{leg.marketLabel || leg.market || '—'}</span>
-                          {' · pick '}<span style={{ color:'var(--green)', fontWeight:800 }}>{leg.pickSymbol ?? '—'}</span>
-                          {leg.pickTeam ? ` (${leg.pickTeam})` : ''}
-                          {leg.odds ? ` · @${leg.odds}` : ''}
-                          {leg.kickoff ? ` · ${fmtKO(leg.kickoff)}` : ''}
-                        </div>
+                {/* Dropdown: the slip's own content (code / picks / screenshot). */}
+                {hasDetails && (
+                  <button onClick={() => setOpenSlipId(open ? null : b.id)}
+                    style={{ width:'100%', marginTop:10, padding:'8px', display:'flex', alignItems:'center', justifyContent:'center', gap:5, background:'var(--bg3)', color: open ? 'var(--gold)' : 'var(--offwhite)', border:'1px solid var(--line)', borderRadius:10, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                    {open ? <>Hide slip <ChevronUp size={13} /></> : <>View slip <ChevronDown size={13} /></>}
+                  </button>
+                )}
+                {open && (
+                  <div style={{ borderTop:'1px solid var(--line)', marginTop:10, paddingTop:10 }}>
+                    {b.booking_code && (
+                      <div style={{ background:'var(--gold-lt)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:10, padding:'8px 12px', marginBottom:10, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <span style={{ fontSize:10, fontWeight:700, color:'var(--muted)', textTransform:'uppercase', letterSpacing:0.8 }}>Booking code</span>
+                        <span style={{ fontSize:15, fontWeight:800, color:'var(--gold)', letterSpacing:2 }}>{b.booking_code}</span>
                       </div>
-                    ))}
-                    {b.slip_summary && <div style={{ fontSize:10.5, color:'var(--muted)', fontStyle:'italic', marginTop:1 }}>{b.slip_summary}</div>}
+                    )}
+                    {norm.length > 0 && (
+                      <div style={{ display:'flex', flexDirection:'column', gap:7, marginBottom: b.slip_image_url ? 10 : 0 }}>
+                        {norm.map((leg: any, i: number) => (
+                          <div key={i} style={{ fontSize:11.5, lineHeight:1.45 }}>
+                            <div style={{ color:'var(--white)', fontWeight:700 }}>{leg.teams || `${leg.homeTeam ?? '?'} vs ${leg.awayTeam ?? '?'}`}</div>
+                            <div style={{ color:'var(--muted)' }}>
+                              <span style={{ color:'var(--gold)', fontWeight:700 }}>{leg.marketLabel || leg.market || '—'}</span>
+                              {' · pick '}<span style={{ color:'var(--green)', fontWeight:800 }}>{leg.pickSymbol ?? '—'}</span>
+                              {leg.pickTeam ? ` (${leg.pickTeam})` : ''}
+                              {leg.odds ? ` · @${leg.odds}` : ''}
+                              {leg.kickoff ? ` · ${fmtKO(leg.kickoff)}` : ''}
+                            </div>
+                          </div>
+                        ))}
+                        {b.slip_summary && <div style={{ fontSize:10.5, color:'var(--muted)', fontStyle:'italic', marginTop:1 }}>{b.slip_summary}</div>}
+                      </div>
+                    )}
+                    {b.slip_image_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={b.slip_image_url} alt="Betslip screenshot" style={{ width:'100%', borderRadius:10, border:'1px solid var(--line)', display:'block' }} />
+                    )}
                   </div>
                 )}
               </div>
@@ -484,9 +513,9 @@ export default function TipsterDashboard() {
             <div className="section-label">This month</div>
             <div className="card" style={{ padding: '6px 16px', marginBottom: 14 }}>
               {[
-                { label: 'Gross collected',    val: `UGX ${thisMonthGross.toLocaleString()}`,                   color: 'var(--offwhite)' },
-                { label: 'Platform fee (10%)', val: `− UGX ${Math.round(thisMonthGross * 0.1).toLocaleString()}`, color: 'var(--muted)'    },
-                { label: 'Sent to your MoMo',  val: `UGX ${thisMonthNet.toLocaleString()}`,                      color: 'var(--green)'    },
+                { label: 'Gross collected',    val: fmtMoney(thisMonthGross),                          color: 'var(--offwhite)' },
+                { label: 'Platform fee (10%)', val: `− ${fmtMoney(Math.round(thisMonthGross * 0.1))}`, color: 'var(--muted)'    },
+                { label: 'Sent to your MoMo',  val: fmtMoney(thisMonthNet),                            color: 'var(--green)'    },
               ].map((r, i) => (
                 <div key={r.label} className="flex justify-between py-3" style={{ borderBottom: i < 2 ? '1px solid var(--line)' : 'none' }}>
                   <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{r.label}</span>
@@ -503,7 +532,7 @@ export default function TipsterDashboard() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--offwhite)' }}>Slip purchase</div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{new Date(e.created_at).toLocaleString()}</div>
                   </div>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--green)' }}>+UGX {(e.amount || 0).toLocaleString()}</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--green)' }}>+{fmtMoney(e.amount || 0)}</span>
                 </div>
               ))}
             </div>
@@ -528,7 +557,7 @@ export default function TipsterDashboard() {
             </div>
             <div className="section-label">All-time earnings</div>
             <div className="card" style={{ textAlign: 'center', padding: '20px 16px' }}>
-              <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--green)' }}>UGX {totalEarned.toLocaleString()}</div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--green)' }}>{fmtMoney(totalEarned)}</div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Total sent to your Mobile Money</div>
             </div>
           </>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { CountryProvider } from '@/components/CountryProvider'
 
 export const metadata: Metadata = {
   title: 'Betfluencer — Football Tips Uganda',
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen" style={{ background: 'var(--bg)' }}>
         <div className="max-w-[480px] mx-auto min-h-screen relative">
-          {children}
+          <CountryProvider>{children}</CountryProvider>
         </div>
       </body>
     </html>

@@ -6,6 +6,7 @@ import {
 import type { PaymentMethod, PaymentResult, TxnStatus } from '@/types/payments'
 import { isTerminal } from '@/types/payments'
 import { buyerHeader, setBuyerPhone } from '@/lib/guestId'
+import { useCountry } from '@/components/CountryProvider'
 
 interface Props {
   open:         boolean
@@ -29,6 +30,7 @@ const phoneDigits = (v: string) => v.replace(/\D/g, '')
 export function PaymentSheet({
   open, amount, betslipId, tipsterName, slipLabel, onDone, onClose,
 }: Props) {
+  const { fmtMoney } = useCountry()
   const [mounted, setMounted] = useState(false)        // drives slide-up transition
   const [state,   setState]   = useState<SheetState>('form')
   const [method,  setMethod]  = useState<PaymentMethod>('momo')
@@ -139,6 +141,14 @@ export function PaymentSheet({
         return
       }
 
+      // Instant success — the free-unlock flow on markets without live
+      // payments resolves synchronously; no phone prompt, nothing to poll.
+      if (data.status === 'success') {
+        setMessage(data.message || '')
+        setState('success')
+        return
+      }
+
       setExtId(data.external_id)
       if (data.card_redirect_url) {
         window.open(data.card_redirect_url, '_blank')
@@ -172,7 +182,7 @@ export function PaymentSheet({
 
   if (!open) return null
 
-  const fmt = `UGX ${amount.toLocaleString()}`
+  const fmt = fmtMoney(amount)
 
   return (
     <div

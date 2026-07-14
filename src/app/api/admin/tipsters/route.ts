@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { hashPassword, normalisePhone } from '@/lib/auth'
 import { requireRole } from '@/lib/auth/session'
+import { getActiveCountry, normalizeCode } from '@/lib/country'
+import { linkTipsterToCountry } from '@/lib/countryFilter'
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
@@ -12,7 +14,21 @@ export async function GET(req: NextRequest) {
   const db = supabaseServer()
   if (!db) return NextResponse.json({ tipsters: [] })
   const { data } = await db.from('tipsters').select('id, name, username, phone, sport, description, verified, created_at').order('created_at', { ascending: false })
-  return NextResponse.json({ tipsters: data ?? [] })
+
+  // Attach each tipster's markets (best-effort — [] if the link table is
+  // unreadable) so the admin panel can show/edit country membership.
+  const codesByTipster = new Map<string, string[]>()
+  try {
+    const { data: links } = await db.from('tipster_countries').select('tipster_id, country_code')
+    for (const l of links ?? []) {
+      const arr = codesByTipster.get(l.tipster_id) ?? []
+      arr.push(l.country_code)
+      codesByTipster.set(l.tipster_id, arr)
+    }
+  } catch { /* pre-migration DB — countries column just renders empty */ }
+
+  const tipsters = (data ?? []).map(t => ({ ...t, countries: codesByTipster.get(t.id) ?? [] }))
+  return NextResponse.json({ tipsters })
 }
 
 export async function POST(req: NextRequest) {
@@ -47,25 +63,72 @@ export async function POST(req: NextRequest) {
     console.error('Tipster insert error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  // Place the new tipster in a market or they'd be invisible everywhere:
+  // an explicit body.country (admin market switcher) wins, else the
+  // market the admin panel is being viewed on (UG by default).
+  const countryCode = normalizeCode(body.country) ?? (await getActiveCountry(req)).code
+  await linkTipsterToCountry(db, tipster.id, countryCode)
+
   return NextResponse.json({ success: true, tipster: { id: tipster.id, name: tipster.name, username: tipster.username, phone: normPhone, password } })
 }
 
 export async function PATCH(req: NextRequest) {
   if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { id, verified, commission_rate } = await req.json()
+  const { id, verified, commission_rate, countries } = await req.json()
   const db = supabaseServer()
   const patch: any = {}
   if (typeof verified === 'boolean') patch.verified = verified
   if (commission_rate !== undefined) patch.commission_rate = (commission_rate === null || commission_rate === '') ? null : Number(commission_rate)
   if (Object.keys(patch).length) await db.from('tipsters').update(patch).eq('id', id)
+
+  // Replace the tipster's market membership. At least one market is
+  // required — an unlinked tipster would be invisible everywhere.
+  if (Array.isArray(countries)) {
+    const codes = Array.from(new Set(countries.map(c => normalizeCode(c)).filter(Boolean))) as string[]
+    if (codes.length === 0) return NextResponse.json({ error: 'A tipster must belong to at least one market' }, { status: 400 })
+    const { error: delErr } = await db.from('tipster_countries').delete().eq('tipster_id', id)
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+    const { error: insErr } = await db.from('tipster_countries').insert(codes.map(c => ({ tipster_id: id, country_code: c })))
+    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
+  }
+
   return NextResponse.json({ success: true })
 }
 
 export async function DELETE(req: NextRequest) {
   if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await req.json()
+  if (!id) return NextResponse.json({ error: 'Tipster id required' }, { status: 400 })
   const db = supabaseServer()
   if (!db) return NextResponse.json({ error: 'Database not connected' }, { status: 500 })
-  await db.from('tipsters').delete().eq('id', id)
+
+  // Several tables reference tipsters(id) WITHOUT `on delete cascade`
+  // (slip_purchases, payments) and others block their own parents
+  // (payments.purchase_id → slip_purchases, earnings.betslip_id → betslips).
+  // Deleting the tipster alone therefore fails with a foreign-key violation,
+  // which the old code swallowed → the row "disappeared" then reappeared on
+  // refresh. Remove dependents child-first, then the tipster, checking each step.
+  const steps: { table: string; column: string }[] = [
+    { table: 'payments',       column: 'tipster_id' },  // → slip_purchases + tipsters
+    { table: 'earnings',       column: 'tipster_id' },  // → betslips (blocks betslip delete)
+    { table: 'slip_purchases', column: 'tipster_id' },  // → betslips + tipsters
+    { table: 'betslips',       column: 'tipster_id' },  // cascades legs/secrets/verifications
+  ]
+  for (const s of steps) {
+    const { error } = await db.from(s.table).delete().eq(s.column, id)
+    // A missing legacy table (e.g. payments dropped later) shouldn't block the
+    // removal; only surface real failures.
+    if (error && error.code !== '42P01') {
+      console.error(`Tipster delete — clearing ${s.table} failed:`, error)
+      return NextResponse.json({ error: `Could not remove ${s.table}: ${error.message}` }, { status: 500 })
+    }
+  }
+
+  const { error } = await db.from('tipsters').delete().eq('id', id)
+  if (error) {
+    console.error('Tipster delete error:', error)
+    return NextResponse.json({ error: `Could not remove tipster: ${error.message}` }, { status: 500 })
+  }
   return NextResponse.json({ success: true })
 }

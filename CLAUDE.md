@@ -29,9 +29,9 @@ Tests: Playwright e2e in `tests/e2e/` (see `tests/e2e/README.md`). Prereq once: 
 
 ## Database
 Supabase CLI migrations: `supabase/config.toml` + `supabase/migrations/`. Apply with `npm run db:push` (or `supabase db reset` locally). Tables also mirrored in `src/lib/schema.sql` / `rls.sql` for reference.
-**Migrations 0001–0010. Apply 0002,0003,0004,0005,0006,0007,0008,0009,0010 to the LIVE DB** (0005 = auth/paywall overhaul; 0010 = skip-verified sync + `verify_attempts`).
+**Migrations 0001–0011. Apply 0002,0003,0004,0005,0006,0007,0008,0009,0010,0011 to the LIVE DB** (0005 = auth/paywall overhaul; 0010 = skip-verified sync + `verify_attempts`; 0011 = multi-country `countries`/`tipster_countries` — **applied to the live DB 2026-07-08**).
 
-**Tables:** `profiles`(role: user|tipster|admin), `tipsters`, `betslips`(+`verification_status`,`hidden`,`verify_attempts`,proof cols), `betslip_legs`, **`betslip_secrets`**(code/site/screenshot — service-role only), `slip_purchases`(`buyer_key` for guests), `slip_verifications`(+`normalized`/`summary`/`total_odds`), `transactions`(ioTec ledger), `payments`(legacy), `earnings`, `platform_settings`. View: `tipster_rankings`.
+**Tables:** `profiles`(role: user|tipster|admin), `tipsters`, `betslips`(+`verification_status`,`hidden`,`verify_attempts`,proof cols), `betslip_legs`, **`betslip_secrets`**(code/site/screenshot — service-role only), `slip_purchases`(`buyer_key` for guests), `slip_verifications`(+`normalized`/`summary`/`total_odds`), `transactions`(ioTec ledger), `payments`(legacy), `earnings`, `platform_settings`, `countries`(per-market config), `tipster_countries`(tipster↔market m:n). View: `tipster_rankings`.
 
 Note: `betslips`/`betslip_legs`/`slip_purchases` have **NO `created_at`** — don't select/order by it (silent empty feed).
 
@@ -70,6 +70,16 @@ Separate Dockerized service in [`bet-code-worker/`](bet-code-worker/) — Vercel
 - **Verification:** the app calls the worker **directly** (`/api/tips`, `sync-codes`, `verify-code` → `verifyAndRecord` → `callWorker` → `BET_CODE_WORKER_URL`). A Redis-queue rearchitecture was built then **reverted** — do NOT reintroduce Redis without the user re-asking.
 - **Bet worker confirmed working** (2026-06-25): live `/verify` 22Bet → `found=true` + Gemini normalize; 1xBet machinery works (slow ~53s on invalid codes — `navigatesOnSubmit` timeout). Runs from a **local/residential IP**; cloud/datacenter IPs are blocked → prod sets `SYNC_CODES_ENABLED=false`.
 - **e2e suite is green** (`npm run test:e2e`) and is the merge gate.
+
+## Multi-country / subdomains (feature/sub-expansion, 2026-07-08)
+One codebase + one DB serves 5 markets (UG NG GH ZA KE), each on a subdomain (`ug.betfluencer.org`, …). **Uganda is the hardcoded default/fallback everywhere** — unknown host, missing table, failed fetch all resolve to UG, so the live market can't break. Only UG is `active`+`payments_enabled`; the rest stay dark until flipped in admin → Markets.
+- **Resolution:** `src/middleware.ts` resolves `?country=XX` (dev override, persisted to `bf_country_override`) → subdomain → cookie → UG, forwards it as `x-country`; routes read it via `getActiveCountry(req)` (`src/lib/country.ts`, edge-safe, 60s cache). Bare `betfluencer.org` page hits: remember-cookie (`bf_country`) or `CF-IPCountry` → redirect to a LIVE market's subdomain, else rewrite to the `/welcome` picker. localhost/previews/subdomains are never redirected; `/api`, `/pay`, `/welcome`, files exempt.
+- **Filtering:** `tipster_countries` (m:n) via `src/lib/countryFilter.ts` — feed/channels/rank-peers filter by the active market; UG **fails open** (unfiltered = pre-expansion), other markets fail closed. Signup/admin-create links the tipster to the active market (an unlinked tipster is invisible).
+- **Currency + sites:** client `useCountry()` (`src/components/CountryProvider.tsx`, fed by `GET /api/country`) → `fmtMoney()` + `orderSitesForCountry()` (reorders `BETTING_SITES`, never removes; UG order unchanged). Real money (`iotec.ts`, `transactions.ts`) stays UGX.
+- **Payments:** `payments/initiate` — UG runs ioTec untouched; `payments_enabled=false` markets get a FREE stub unlock (same txn+purchase rows, `status='success'`, `amount_paid=0`, no earning/payout). That branch is the seam for Paystack/Flutterwave/M-Pesa later.
+- **Admin:** header market dropdown (`?market=` on admin APIs — NOT `?country=`, which is the public override), Markets tab toggles `active`/`payments_enabled`/`coming_soon` via `/api/admin/countries` (**UG locked, UI + 403**), per-tipster market chips, all-markets overview strip.
+- **Local testing:** `localhost:3000/?country=NG` etc.; geo logic via `curl -H "Host: betfluencer.org" -H "cf-ipcountry: XX"`. Optional env `NEXT_PUBLIC_MAIN_DOMAIN` (default `betfluencer.org`).
+- **e2e runner note:** newer local Supabase images leave API roles without table grants after `db reset` → `scripts/e2e.sh` re-grants (step 2b). Local-only; prod grants are managed by the hosted platform.
 
 ## Known landmines (read before touching auth)
 Full detail in [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md).
