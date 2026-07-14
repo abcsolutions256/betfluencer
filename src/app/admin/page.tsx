@@ -2,11 +2,20 @@
 import { useState, useEffect } from 'react'
 import {
   Shield, Home, Users, BarChart2, ShieldCheck,
-  Loader2, LogOut, Receipt, Eye, EyeOff, CheckCircle
+  Loader2, LogOut, Receipt, Eye, EyeOff, CheckCircle, Globe
 } from 'lucide-react'
 import type { TransactionRow, TxnStatus } from '@/types/payments'
+import type { Country } from '@/lib/country'
 
-type AdminTab = 'overview' | 'ads' | 'tipsters' | 'slips' | 'transactions' | 'revenue' | 'verify' | 'review'
+type AdminTab = 'overview' | 'ads' | 'tipsters' | 'slips' | 'transactions' | 'revenue' | 'verify' | 'review' | 'markets'
+
+// 'UG' → 🇺🇬 (regional-indicator pair; renders as letters on Windows).
+const flag = (code: string) =>
+  String.fromCodePoint(...code.toUpperCase().split('').map(c => 0x1f1e6 + c.charCodeAt(0) - 65))
+
+// Money label for a market code ('' = all markets → UGX, today's display).
+const symFor = (markets: Country[], market: string) =>
+  markets.find(c => c.code === market)?.currency_symbol ?? 'UGX'
 
 // ── STAT CARD ─────────────────────────────────────────────────────
 function StatCard({ val, label, color = 'var(--white)', sub }: { val: string; label: string; color?: string; sub?: string }) {
@@ -68,7 +77,7 @@ function VerifyTab() {
 // Shows all pending slips. Admin settles each: Won / Lost / Void.
 // Auto-verify tries the football API first (POST /api/verify), then the
 // remainder are settled manually via POST /api/admin/settle.
-function ReviewTab() {
+function ReviewTab({ market, sym }: { market: string; sym: string }) {
   const [slips, setSlips]     = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId]   = useState<string | null>(null)
@@ -76,13 +85,14 @@ function ReviewTab() {
 
   function load() {
     setLoading(true)
-    fetch(`/api/admin/pending-slips?t=${Date.now()}`, { cache: 'no-store' })
+    fetch(`/api/admin/pending-slips?market=${market}&t=${Date.now()}`, { cache: 'no-store' })
       .then(r => r.json())
       .then(d => { setSlips(d.slips ?? []); setLoading(false) })
       .catch(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [market])
 
   async function settle(slipId: string, result: 'win' | 'loss' | 'void') {
     setBusyId(slipId)
@@ -145,7 +155,7 @@ function ReviewTab() {
               {slip.betting_site || 'Betslip'} · {slip.leg_count || slip.legs?.length || 0} legs · ×{(slip.total_odds || 0).toFixed(2)}
             </div>
             <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6 }}>
-              {slip.tipster_name ?? 'Unknown'} · {slip.booking_code ? `Code ${slip.booking_code}` : slip.posting_mode} · UGX {(slip.slip_price || 0).toLocaleString()}
+              {slip.tipster_name ?? 'Unknown'} · {slip.booking_code ? `Code ${slip.booking_code}` : slip.posting_mode} · {sym} {(slip.slip_price || 0).toLocaleString()}
             </div>
             {slip.legs?.map((leg: any, i: number) => (
               <div key={leg.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: i > 0 ? '1px solid var(--line)' : 'none' }}>
@@ -175,24 +185,24 @@ function ReviewTab() {
 }
 
 // ── REVENUE TAB ───────────────────────────────────────────────────
-function RevenueTab() {
+function RevenueTab({ market, sym }: { market: string; sym: string }) {
   const [data, setData] = useState<any>({ total: 0, commission: 0, purchases: [], tipsters: [] })
 
   useEffect(() => {
-    fetch('/api/admin/revenue')
+    fetch(`/api/admin/revenue?market=${market}`)
       .then(r => r.json()).then(d => setData(d))
       .catch(() => {})
-  }, [])
+  }, [market])
 
   return (
     <>
       <div style={{ background: 'var(--green-lt)', border: '1px solid rgba(46,204,122,0.2)', borderRadius: 16, padding: '18px', marginBottom: 14, textAlign: 'center' }}>
         <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Total commission earned</div>
-        <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--white)' }}>UGX {(data.commission ?? 0).toLocaleString()}</div>
+        <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--white)' }}>{sym} {(data.commission ?? 0).toLocaleString()}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
         <StatCard val={(data.purchases ?? 0).toString()} label="Total slip purchases" />
-        <StatCard val={`UGX ${(data.total ?? 0).toLocaleString()}`} label="Gross revenue" color="var(--gold)" />
+        <StatCard val={`${sym} ${(data.total ?? 0).toLocaleString()}`} label="Gross revenue" color="var(--gold)" />
       </div>
       {data.tipsters?.length > 0 && (
         <>
@@ -204,7 +214,7 @@ function RevenueTab() {
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--offwhite)' }}>{t.name}</div>
                   <div style={{ fontSize: 10, color: 'var(--muted)' }}>{t.purchases} purchases</div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--gold)' }}>UGX {t.revenue.toLocaleString()}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--gold)' }}>{sym} {t.revenue.toLocaleString()}</div>
               </div>
             ))}
           </div>
@@ -218,7 +228,7 @@ function RevenueTab() {
 }
 
 // ── TIPSTERS TAB ──────────────────────────────────────────────────
-function TipstersTab() {
+function TipstersTab({ market, markets }: { market: string; markets: Country[] }) {
   const [tipsters,     setTipsters]     = useState<any[]>([])
   const [signupsOpen,  setSignupsOpen]  = useState(false)
   const [showCreate,   setShowCreate]   = useState(false)
@@ -257,12 +267,13 @@ function TipstersTab() {
     if (!form.name || !form.phone || !form.password) return
     setLoading(true)
     setCreateError('')
-    const res  = await fetch('/api/admin/tipsters', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    // New tipsters join the market being viewed ('All markets' → Uganda).
+    const res  = await fetch('/api/admin/tipsters', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, country: market || 'UG' }) })
     const data = await res.json()
     setLoading(false)
     if (data.success) {
       setNewTipster(data.tipster)
-      setTipsters(prev => [data.tipster, ...prev])
+      setTipsters(prev => [{ ...data.tipster, countries: [market || 'UG'] }, ...prev])
       setForm({ name: '', phone: '', password: '', sport: '', description: '' })
       setShowCreate(false)
     } else {
@@ -273,6 +284,17 @@ function TipstersTab() {
   async function toggleVerified(id: string, verified: boolean) {
     await fetch('/api/admin/tipsters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, verified: !verified }) })
     setTipsters(prev => prev.map(t => t.id === id ? { ...t, verified: !verified } : t))
+  }
+
+  // Add/remove a tipster from a market. The server enforces ≥1 market;
+  // we also guard here so the last chip can't even be tapped off.
+  async function toggleCountry(t: any, code: string) {
+    const has  = (t.countries ?? []).includes(code)
+    if (has && (t.countries ?? []).length <= 1) return
+    const next = has ? t.countries.filter((c: string) => c !== code) : [...(t.countries ?? []), code]
+    const res  = await fetch('/api/admin/tipsters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: t.id, countries: next }) })
+    if (res.ok) setTipsters(prev => prev.map(x => x.id === t.id ? { ...x, countries: next } : x))
+    else alert((await res.json().catch(() => ({}))).error ?? 'Could not update markets')
   }
 
   async function deleteTipster(id: string) {
@@ -369,14 +391,17 @@ function TipstersTab() {
         </div>
       )}
 
-      {/* Tipster list */}
+      {/* Tipster list — filtered to the selected market ('' = all) */}
+      {(() => { const shown = tipsters.filter(t => !market || (t.countries ?? []).includes(market)); return (<>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
-        All tipsters ({tipsters.length})
+        {market ? `${market} tipsters (${shown.length})` : `All tipsters (${shown.length})`}
       </div>
-      {tipsters.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)', fontSize: 13 }}>No tipsters yet — create the first one above</div>
+      {shown.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)', fontSize: 13 }}>
+          {market ? 'No tipsters in this market yet — tap a market chip on a tipster to add them' : 'No tipsters yet — create the first one above'}
+        </div>
       )}
-      {tipsters.map(t => (
+      {shown.map(t => (
         <div key={t.id} className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--bg3)', color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
@@ -391,6 +416,20 @@ function TipstersTab() {
               {t.verified ? '✓ Verified' : 'Unverified'}
             </span>
           </div>
+          {/* Market membership — tap to add/remove (last market is locked) */}
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+            {markets.map(c => {
+              const on   = (t.countries ?? []).includes(c.code)
+              const last = on && (t.countries ?? []).length <= 1
+              return (
+                <button key={c.code} onClick={() => toggleCountry(t, c.code)} disabled={last}
+                  title={last ? 'A tipster must stay in at least one market' : on ? `Remove from ${c.name}` : `Add to ${c.name}`}
+                  style={{ padding: '3px 9px', borderRadius: 20, fontSize: 10, fontWeight: 700, cursor: last ? 'default' : 'pointer', background: on ? 'var(--gold-lt)' : 'var(--bg3)', color: on ? 'var(--gold)' : 'var(--muted)', border: `1px solid ${on ? 'rgba(245,166,35,0.3)' : 'var(--line)'}` }}>
+                  {flag(c.code)} {c.code}
+                </button>
+              )
+            })}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
             <button onClick={() => toggleVerified(t.id, t.verified)} style={{ padding: '7px', background: t.verified ? 'var(--red-lt)' : 'var(--green-lt)', color: t.verified ? 'var(--red)' : 'var(--green)', border: 'none', borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
               {t.verified ? 'Remove tick' : 'Award tick'}
@@ -404,6 +443,7 @@ function TipstersTab() {
           </div>
         </div>
       ))}
+      </>) })()}
     </>
   )
 }
@@ -435,18 +475,18 @@ function txnStatusStyle(status: TxnStatus): { bg: string; color: string; border:
   }
 }
 
-function TransactionsTab() {
+function TransactionsTab({ market }: { market: string }) {
   const [status,  setStatus]  = useState<'' | TxnStatus>('')
   const [rows,    setRows]    = useState<AdminTxnRow[]>([])
   const [count,   setCount]   = useState(0)
   const [loading, setLoading] = useState(true)
   const [more,    setMore]    = useState(false)
 
-  // Initial load + refetch from offset 0 whenever the status filter changes.
+  // Initial load + refetch from offset 0 whenever a filter changes.
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch(`/api/admin/transactions?status=${status}&limit=${PAGE_SIZE}&offset=0`)
+    fetch(`/api/admin/transactions?status=${status}&market=${market}&limit=${PAGE_SIZE}&offset=0`)
       .then(r => r.json())
       .then(d => {
         if (cancelled) return
@@ -456,12 +496,12 @@ function TransactionsTab() {
       .catch(() => { if (!cancelled) { setRows([]); setCount(0) } })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [status])
+  }, [status, market])
 
   async function loadMore() {
     setMore(true)
     try {
-      const res = await fetch(`/api/admin/transactions?status=${status}&limit=${PAGE_SIZE}&offset=${rows.length}`)
+      const res = await fetch(`/api/admin/transactions?status=${status}&market=${market}&limit=${PAGE_SIZE}&offset=${rows.length}`)
       const d   = await res.json()
       setRows(prev => [...prev, ...(d.transactions ?? [])])
       if (typeof d.count === 'number') setCount(d.count)
@@ -519,7 +559,8 @@ function TransactionsTab() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--white)' }}>
-                      UGX {t.amount.toLocaleString()}
+                      {/* Each row carries its own currency (stub unlocks record the market's). */}
+                      {t.currency ?? 'UGX'} {t.amount.toLocaleString()}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
                       {new Date(t.created_at).toLocaleString('en-UG', { dateStyle: 'medium', timeStyle: 'short' })}
@@ -582,15 +623,16 @@ function TxnField({ label, value, mono, capitalize, span2 }: { label: string; va
 // All slips are shown on the marketplace by default; hide a stale/expired one
 // here to pull it (kickoff times aren't reliable across bookies, so removal is
 // manual). Hidden slips stay on the tipster's own dashboard, tagged "Hidden".
-function SlipsTab() {
+function SlipsTab({ market }: { market: string }) {
   const [slips, setSlips]     = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/admin/slips')
+    setLoading(true)
+    fetch(`/api/admin/slips?market=${market}`)
       .then(r => r.json()).then(d => setSlips(d.slips ?? [])).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+  }, [market])
 
   async function toggle(id: string, hidden: boolean) {
     setBusy(id)
@@ -632,6 +674,68 @@ function SlipsTab() {
   )
 }
 
+// ── MARKETS TAB (country controls) ────────────────────────────────
+// Flip a market live (active), enable its payments, or tag it coming
+// soon — no SQL needed. Uganda is locked here AND server-side (403):
+// the live market can't be toggled from the panel; SQL is the
+// deliberate escape hatch.
+function MarketsTab({ markets, onChange }: { markets: Country[]; onChange: (c: Country) => void }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [err,  setErr]  = useState('')
+
+  async function toggle(c: Country, field: 'active' | 'payments_enabled' | 'coming_soon') {
+    setBusy(c.code); setErr('')
+    const res = await fetch('/api/admin/countries', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: c.code, [field]: !c[field] }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (res.ok && d.country) onChange(d.country)
+    else setErr(d.error ?? 'Could not update the market')
+    setBusy(null)
+  }
+
+  function Toggle({ c, field, label, onColor }: { c: Country; field: 'active' | 'payments_enabled' | 'coming_soon'; label: string; onColor: string }) {
+    const locked = c.code === 'UG'
+    const on = !!c[field]
+    return (
+      <button onClick={() => toggle(c, field)} disabled={locked || busy === c.code}
+        title={locked ? 'Uganda is the live market — locked' : undefined}
+        style={{ padding: '7px 4px', borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: locked ? 'default' : 'pointer', opacity: locked ? 0.55 : 1, background: on ? `${onColor === 'var(--green)' ? 'var(--green-lt)' : 'var(--gold-lt)'}` : 'var(--bg3)', color: on ? onColor : 'var(--muted)', border: `1px solid ${on ? 'transparent' : 'var(--line)'}` }}>
+        {label}: {on ? 'ON' : 'OFF'}
+      </button>
+    )
+  }
+
+  return (
+    <>
+      <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: 'var(--offwhite)', lineHeight: 1.6 }}>
+        <b>Active</b> makes a market public (geo-redirect + clickable on the picker). <b>Payments</b> switches it from free unlocks to real charges (needs a processor — only Uganda/ioTec today). <b>Coming soon</b> is the tag on the picker. Uganda is locked.
+      </div>
+      {err && <div style={{ background: 'var(--red-lt)', color: 'var(--red)', borderRadius: 10, padding: '9px 12px', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{err}</div>}
+      {markets.map(c => (
+        <div key={c.code} className="card" style={{ borderLeft: `3px solid ${c.active ? 'var(--green)' : 'var(--line)'}`, marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 22 }}>{flag(c.code)}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)' }}>
+                {c.name} {c.code === 'UG' && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--gold)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 20, padding: '2px 7px', marginLeft: 4, verticalAlign: 'middle' }}>LIVE · LOCKED</span>}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{c.subdomain}.betfluencer.org · {c.currency_code} ({c.currency_symbol})</div>
+            </div>
+            {busy === c.code && <Loader2 size={14} className="spin" color="var(--gold)" />}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            <Toggle c={c} field="active"           label="Active"      onColor="var(--green)" />
+            <Toggle c={c} field="payments_enabled" label="Payments"    onColor="var(--green)" />
+            <Toggle c={c} field="coming_soon"      label="Coming soon" onColor="var(--gold)"  />
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
 // ── MAIN ADMIN PANEL ──────────────────────────────────────────────
 export default function AdminPage() {
   const [authed,   setAuthed]   = useState(false)
@@ -639,21 +743,48 @@ export default function AdminPage() {
   const [checking, setChecking] = useState(true)
   const [stats,    setStats]    = useState({ subscribers: 0, tipsters: 0, commission: 0, liveAds: 0 })
   const [activity, setActivity] = useState<{ text: string; time: string }[]>([])
+  const [byCountry, setByCountry] = useState<any[]>([])
   const [pw,       setPw]       = useState('')
   const [loginErr, setLoginErr] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
 
-  function loadStats() {
-    fetch('/api/admin/stats')
-      .then(r => r.json())
-      .then(d => { if (d.stats) setStats(d.stats); if (d.activity) setActivity(d.activity) })
-      .catch(() => {})
+  // ── Market switcher ('' = all markets) — survives tab reloads ────
+  const [market,  setMarket]  = useState('')
+  const [markets, setMarkets] = useState<Country[]>([])
+  const sym = symFor(markets, market)
+  function changeMarket(m: string) {
+    setMarket(m)
+    try { sessionStorage.setItem('bf_admin_market', m) } catch { /* private mode */ }
   }
+
+  useEffect(() => {
+    try { setMarket(sessionStorage.getItem('bf_admin_market') ?? '') } catch { /* private mode */ }
+  }, [])
+
+  // Stats follow the selected market; markets list loads once on auth.
+  useEffect(() => {
+    if (!authed) return
+    fetch(`/api/admin/stats?market=${market}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.stats) setStats(d.stats)
+        if (d.activity) setActivity(d.activity)
+        setByCountry(d.byCountry ?? [])
+      })
+      .catch(() => {})
+  }, [authed, market])
+
+  useEffect(() => {
+    if (!authed) return
+    fetch('/api/admin/countries')
+      .then(r => r.json()).then(d => setMarkets(d.countries ?? []))
+      .catch(() => {})
+  }, [authed])
 
   useEffect(() => {
     // Admin = a valid admin session cookie (master password).
     fetch('/api/admin/me')
-      .then(r => { if (!r.ok) return; setAuthed(true); loadStats() })
+      .then(r => { if (!r.ok) return; setAuthed(true) })
       .finally(() => setChecking(false))
   }, [])
 
@@ -667,7 +798,7 @@ export default function AdminPage() {
     const d = await res.json().catch(() => ({}))
     setLoggingIn(false)
     if (!res.ok) { setLoginErr(d.error || 'Login failed'); return }
-    setAuthed(true); loadStats()
+    setAuthed(true)
   }
 
   async function logout() {
@@ -705,10 +836,28 @@ export default function AdminPage() {
         </button>
       </div>
 
+      {/* Market switcher — scopes every tab to one market ('' = all) */}
+      <div style={{ background: 'var(--bg2)', padding: '8px 16px 10px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Globe size={14} color="var(--gold)" style={{ flexShrink: 0 }} />
+        <select
+          value={market}
+          onChange={e => changeMarket(e.target.value)}
+          style={{ flex: 1, background: 'var(--bg3)', color: 'var(--white)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+        >
+          <option value="">🌍 All markets (overview)</option>
+          {markets.map(c => (
+            <option key={c.code} value={c.code}>
+              {flag(c.code)} {c.name}{c.active ? '' : ' — not live'}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Tabs */}
       <div style={{ display: 'flex', background: 'var(--bg2)', borderBottom: '1px solid var(--line)' }}>
         {([
           { key: 'overview',     icon: Home,        label: 'Overview' },
+          { key: 'markets',      icon: Globe,        label: 'Markets'  },
           { key: 'tipsters',     icon: Users,        label: 'Tipsters' },
           { key: 'slips',        icon: EyeOff,       label: 'Slips'    },
           { key: 'transactions', icon: Receipt,      label: 'Txns'     },
@@ -729,13 +878,42 @@ export default function AdminPage() {
         {/* ── OVERVIEW ── */}
         {tab === 'overview' && (
           <>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Platform today</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+              {market ? `${markets.find(c => c.code === market)?.name ?? market} today` : 'Platform today'}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
               <StatCard val={stats.subscribers.toLocaleString()} label="Total purchases" />
               <StatCard val={stats.tipsters.toString()} label="Live tipsters" color="var(--green)" />
-              <StatCard val={`UGX ${(stats.commission/1000).toFixed(0)}k`} label="Total commission" color="var(--gold)" />
+              <StatCard val={`${sym} ${(stats.commission/1000).toFixed(0)}k`} label="Total commission" color="var(--gold)" />
               <StatCard val={stats.liveAds.toString()} label="Live ads" />
             </div>
+
+            {/* All-markets view: how each market is doing side by side */}
+            {!market && byCountry.length > 0 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, margin: '14px 0 10px' }}>By market</div>
+                <div className="card" style={{ padding: '4px 14px', marginBottom: 4 }}>
+                  {byCountry.map((c: any, i: number) => (
+                    <div key={c.code} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < byCountry.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                      <span style={{ fontSize: 16, flexShrink: 0 }}>{flag(c.code)}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--white)' }}>
+                          {c.name}
+                          <span style={{ fontSize: 9, fontWeight: 700, marginLeft: 6, padding: '1px 7px', borderRadius: 20, background: c.active ? 'var(--green-lt)' : 'var(--bg3)', color: c.active ? 'var(--green)' : 'var(--muted)' }}>
+                            {c.active ? 'LIVE' : 'DARK'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>{c.tipsters} tipsters · {c.purchases} purchases</div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--gold)' }}>{c.currency_code} {(c.commission ?? 0).toLocaleString()}</div>
+                        <div style={{ fontSize: 9, color: 'var(--muted)' }}>commission</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, margin: '14px 0 10px' }}>Recent activity</div>
             <div className="card" style={{ padding: '4px 14px' }}>
@@ -760,23 +938,26 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ── MARKETS (country controls) ── */}
+        {tab === 'markets' && <MarketsTab markets={markets} onChange={c => setMarkets(prev => prev.map(x => x.code === c.code ? c : x))} />}
+
         {/* ── TIPSTERS ── */}
-        {tab === 'tipsters' && <TipstersTab />}
+        {tab === 'tipsters' && <TipstersTab market={market} markets={markets} />}
 
         {/* ── SLIPS ── */}
-        {tab === 'slips' && <SlipsTab />}
+        {tab === 'slips' && <SlipsTab market={market} />}
 
         {/* ── TRANSACTIONS ── */}
-        {tab === 'transactions' && <TransactionsTab />}
+        {tab === 'transactions' && <TransactionsTab market={market} />}
 
         {/* ── REVENUE ── */}
-        {tab === 'revenue' && <RevenueTab />}
+        {tab === 'revenue' && <RevenueTab market={market} sym={sym} />}
 
         {/* ── VERIFY (leg-level review) ── */}
         {tab === 'verify' && <VerifyTab />}
 
         {/* ── SETTLE (slip settlement) ── */}
-        {tab === 'review' && <ReviewTab />}
+        {tab === 'review' && <ReviewTab market={market} sym={sym} />}
       </div>
     </div>
   )

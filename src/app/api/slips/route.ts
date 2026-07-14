@@ -8,12 +8,16 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { fetchHiddenSlipIds } from '@/lib/slipStatus'
+import { getActiveCountry } from '@/lib/country'
+import { tipsterIdsForCountry, filterByTipsterIds } from '@/lib/countryFilter'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET() {
+export async function GET(req: Request) {
   const db = supabaseServer()
+  const country = await getActiveCountry(req)
+  const marketIds = await tipsterIdsForCountry(db, country.code)
 
   // Explicit, secret-free column list: never select booking_code / betting_site
   // / slip_image_url (those live in betslip_secrets) and never join betslip_legs
@@ -29,7 +33,11 @@ export async function GET() {
   if (error) return NextResponse.json({ slips: [] })
 
   const hidden = await fetchHiddenSlipIds(db)   // admin-hidden slips (best-effort)
-  const live = (slips ?? []).filter((s: any) => !hidden.has(s.id))   // except admin-hidden
+  const live = filterByTipsterIds(
+    (slips ?? []).filter((s: any) => !hidden.has(s.id)),   // except admin-hidden
+    marketIds,
+    'tipster_id'                                            // active market only
+  )
 
   // Recent form per tipster: wins in their last 5 settled slips
   // (tipster_stats.last5 = e.g. "W,W,L,L,W"). Used to order the feed.

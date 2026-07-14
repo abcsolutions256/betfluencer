@@ -11,6 +11,8 @@ import { getTipsterByPhone, createTipsterAccount } from '@/lib/db'
 import { createSession } from '@/lib/auth/session'
 import { supabaseServer } from '@/lib/supabase'
 import { publicSignupsEnabled } from '@/lib/settings'
+import { getActiveCountry } from '@/lib/country'
+import { linkTipsterToCountry } from '@/lib/countryFilter'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,6 +85,14 @@ export async function POST(req: NextRequest) {
       // No DB (mock) or a unique-constraint collision on username.
       if (!supabaseServer()) return NextResponse.json({ error: 'Database not configured' }, { status: 500 })
       return NextResponse.json({ error: 'That username is already taken.' }, { status: 409 })
+    }
+
+    // New tipsters belong to the market they signed up on (best-effort —
+    // a link failure never blocks signup; UG shows unfiltered on error).
+    const db = supabaseServer()
+    if (db) {
+      const country = await getActiveCountry(req)
+      await linkTipsterToCountry(db, tipster.id, country.code)
     }
 
     createSession(tipster.id, 'tipster')

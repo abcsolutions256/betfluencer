@@ -4,19 +4,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { requireRole } from '@/lib/auth/session'
+import { marketFilterFromRequest, filterByTipsterIds } from '@/lib/countryFilter'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const db = supabaseServer()
+  const marketIds = await marketFilterFromRequest(db, req)   // ?market=XX → that market only
   const { data, error } = await db
     .from('betslips')
-    .select('id, posting_mode, verification_status, result, total_odds, game_count, markets, earliest_kickoff, hidden, posted_at, tipsters ( name, username )')
+    .select('id, tipster_id, posting_mode, verification_status, result, total_odds, game_count, markets, earliest_kickoff, hidden, posted_at, tipsters ( name, username )')
     .order('posted_at', { ascending: false })
     .limit(80)
   if (error) return NextResponse.json({ slips: [], error: error.message })
-  return NextResponse.json({ slips: data ?? [] })
+  return NextResponse.json({ slips: filterByTipsterIds(data ?? [], marketIds, 'tipster_id') })
 }
 
 export async function POST(req: NextRequest) {

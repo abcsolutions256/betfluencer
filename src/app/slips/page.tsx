@@ -8,6 +8,7 @@ import type { Betslip } from '@/types/betslip'
 import { PaymentSheet } from '@/components/ui/PaymentSheet'
 import { SlipReveal } from '@/components/ui/SlipReveal'
 import { buyerHeader } from '@/lib/guestId'
+import { useCountry } from '@/components/CountryProvider'
 
 type Row = { slip: Betslip; tipsterName: string; tipsterUsername: string }
 
@@ -17,6 +18,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 
 function SlipCard({ row, unlocked, onBuy }: { row: Row; unlocked: boolean; onBuy: () => void }) {
   const { slip, tipsterName, tipsterUsername } = row
+  const { fmtMoney } = useCountry()
   const router   = useRouter()
   const [open, setOpen] = useState(false)
   const finished = slip.result === 'win' || slip.result === 'loss'
@@ -73,7 +75,7 @@ function SlipCard({ row, unlocked, onBuy }: { row: Row; unlocked: boolean; onBuy
           <>
             <div>
               <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>One-time purchase</div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--white)' }}>UGX {slip.slip_price.toLocaleString()}</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--white)' }}>{fmtMoney(slip.slip_price)}</div>
             </div>
             <button onClick={onBuy} style={{ background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 11, padding: '10px 18px', fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>Buy slip →</button>
           </>
