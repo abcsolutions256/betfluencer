@@ -238,3 +238,36 @@ create trigger transactions_set_updated_at
 
 alter table transactions enable row level security;
 create policy "transactions_service_only" on transactions for all using (true);
+
+-- ── COUNTRIES (multi-market config — migration 0011) ──────────────
+-- One row per market; each market lives on its own subdomain. Uganda
+-- (UG) is the live default/fallback; other markets stay inactive /
+-- coming-soon until flipped live. payments_enabled=false → the free
+-- stub unlock flow instead of ioTec.
+create table countries (
+  code             text primary key,            -- ISO 3166-1 alpha-2, e.g. 'UG'
+  name             text not null,
+  subdomain        text not null unique,        -- 'ng' → ng.betfluencer.org
+  currency_code    text not null,               -- ISO 4217, e.g. 'NGN'
+  currency_symbol  text not null,               -- display prefix, e.g. '₦'
+  betting_sites    text[] not null default '{}', -- ordered, most popular first
+  payments_enabled boolean not null default false,
+  active           boolean not null default false,
+  coming_soon      boolean not null default true,
+  created_at       timestamptz not null default now()
+);
+
+-- Tipster ↔ country visibility (many-to-many). Every pre-expansion
+-- tipster is backfilled into UG.
+create table tipster_countries (
+  tipster_id   uuid not null references tipsters(id) on delete cascade,
+  country_code text not null references countries(code) on delete cascade,
+  created_at   timestamptz not null default now(),
+  primary key (tipster_id, country_code)
+);
+
+create index idx_tipster_countries_country on tipster_countries (country_code);
+
+-- Service-role only (no anon policies) — clients read country config via the API.
+alter table countries         enable row level security;
+alter table tipster_countries enable row level security;

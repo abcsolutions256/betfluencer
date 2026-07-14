@@ -62,6 +62,21 @@ fi
 log "Applying migrations (supabase db reset --no-seed)…"
 supabase db reset --no-seed >/dev/null
 
+# ── 2b. Restore API-role table grants ─────────────────────────────────────
+# Newer local Supabase images (seen with CLI 2.108) apply default privileges
+# that leave anon/authenticated/service_role WITHOUT select/insert/update/
+# delete on migration-created tables — PostgREST then throws 42501
+# "permission denied" even for the service role, failing global-setup.
+# Re-grant after every reset (schema-wide, mirrors hosted defaults; RLS still
+# gates rows). LOCAL ONLY — the hosted prod DB manages its own grants.
+log "Re-granting API-role privileges…"
+docker exec supabase_db_betfluencer psql -U postgres -d postgres -q -c "
+  grant usage on schema public to anon, authenticated, service_role;
+  grant select, insert, update, delete on all tables in schema public to anon, authenticated, service_role;
+  grant usage, select on all sequences in schema public to anon, authenticated, service_role;
+  grant execute on all functions in schema public to anon, authenticated, service_role;
+" >/dev/null
+
 # ── 3. Export local keys + demo/test env ──────────────────────────────────
 # `supabase status -o env` prints ANON_KEY / SERVICE_ROLE_KEY (legacy JWTs the
 # app's supabase-js / GoTrue auth need) + API_URL. Capture and re-export them

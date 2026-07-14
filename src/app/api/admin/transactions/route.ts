@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth/session'
 import { listTransactions } from '@/lib/transactions'
+import { supabaseServer } from '@/lib/supabase'
+import { marketFilterFromRequest } from '@/lib/countryFilter'
 import type { TxnStatus } from '@/types/payments'
 
 export async function GET(req: NextRequest) {
@@ -23,6 +25,12 @@ export async function GET(req: NextRequest) {
   const limit  = Number(sp.get('limit'))  || 50
   const offset = Number(sp.get('offset')) || 0
 
-  const { rows, count } = await listTransactions({ status, limit, offset })
+  // Optional ?market=XX (admin market switcher) → that market's tipsters only.
+  const marketIds = await marketFilterFromRequest(supabaseServer(), req)
+
+  const { rows, count } = await listTransactions({
+    status, limit, offset,
+    tipsterIds: marketIds ? Array.from(marketIds) : null,
+  })
   return NextResponse.json({ transactions: rows, count })
 }

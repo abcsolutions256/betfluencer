@@ -6,6 +6,7 @@ import { getRiskLabel } from '@/types/betslip'
 import { usePayment } from '@/hooks/usePayment'
 import { SlipReveal } from '@/components/ui/SlipReveal'
 import { buyerHeader } from '@/lib/guestId'
+import { useCountry } from '@/components/CountryProvider'
 
 function Chip({ children }: { children: React.ReactNode }) {
   return <span style={{ background: 'var(--bg3)', color: 'var(--offwhite)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20, border: '1px solid var(--line)' }}>{children}</span>
@@ -14,6 +15,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 // ── INLINE BUY FLOW (ioTec via usePayment — buyer identity by x-buyer-phone) ──
 function InlineBuyGate({ slip, tipsterName, onUnlock }: { slip: Betslip; tipsterName?: string; onUnlock: () => void }) {
   const { pay, sheet } = usePayment()
+  const { fmtMoney } = useCountry()
   async function buy() {
     const r = await pay({ betslipId: slip.id, amount: slip.slip_price, tipsterName, slipLabel: `${slip.game_count ?? slip.leg_count ?? ''} games · odds ${(slip.total_odds ?? 0).toFixed(2)}` })
     if (r.status === 'success') onUnlock()
@@ -25,7 +27,7 @@ function InlineBuyGate({ slip, tipsterName, onUnlock }: { slip: Betslip; tipster
         <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Unlock to see the code &amp; picks</div>
       </div>
       <button onClick={buy} style={{ width: '100%', padding: 12, background: 'var(--gold)', color: '#1a0a00', border: 'none', borderRadius: 12, cursor: 'pointer', fontSize: 14, fontWeight: 800 }}>
-        Buy slip · UGX {(slip.slip_price ?? 0).toLocaleString()}
+        Buy slip · {fmtMoney(slip.slip_price ?? 0)}
       </button>
       <div style={{ textAlign: 'center', marginTop: 6, fontSize: 10, color: 'var(--muted)' }}>One-time · Mobile Money or Card</div>
       {sheet}

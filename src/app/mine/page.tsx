@@ -7,10 +7,12 @@ import { Loader2, Users, Bookmark } from 'lucide-react'
 import { getFollows } from '@/lib/follows'
 import { getBuyerPhone, setBuyerPhone } from '@/lib/guestId'
 import Link from 'next/link'
+import { useCountry } from '@/components/CountryProvider'
 
 type MineTab = 'following' | 'purchases'
 
 export default function MinePage() {
+  const { fmtMoney } = useCountry()
   const [tab,      setTab]      = useState<MineTab>('following')
   const [follows,  setFollows]  = useState<string[]>([])
   const [tipsters, setTipsters] = useState<any[]>([])
@@ -161,7 +163,7 @@ export default function MinePage() {
                       <div>
                         <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)' }}>{s.tipster?.name ?? 'Tipster'}</div>
                         <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                          {(s.betslip?.game_count ?? '—')} games · odds {Number(s.betslip?.total_odds ?? 0).toFixed(2)} · UGX {(s.amount_paid ?? 0).toLocaleString()}
+                          {(s.betslip?.game_count ?? '—')} games · odds {Number(s.betslip?.total_odds ?? 0).toFixed(2)} · {fmtMoney(s.amount_paid ?? 0)}
                         </div>
                       </div>
                     </div>

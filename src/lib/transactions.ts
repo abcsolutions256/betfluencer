@@ -75,16 +75,19 @@ export async function listTransactions(opts: {
   limit?: number
   offset?: number
   status?: TxnStatus
+  tipsterIds?: string[] | null   // admin market filter; null/undefined = all
 } = {}): Promise<{ rows: TransactionRow[]; count: number }> {
   const db = supabaseServer()
   const limit  = opts.limit  ?? 50
   const offset = opts.offset ?? 0
+  if (opts.tipsterIds && opts.tipsterIds.length === 0) return { rows: [], count: 0 }
   let q = db
     .from(TABLE)
     .select('*, tipster:tipsters(name, username)', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset+1, offset + limit - 1)
   if (opts.status) q = q.eq('status', opts.status)
+  if (opts.tipsterIds) q = q.in('tipster_id', opts.tipsterIds)
   const { data, count ,error} = await q
   return { rows: (data as TransactionRow[]) ?? [], count: count ?? 0 }
 }
