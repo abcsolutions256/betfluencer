@@ -108,7 +108,11 @@ export async function loadCountries(): Promise<Country[]> {
   if (!url || !key) return [DEFAULT_COUNTRY]
 
   try {
-    const res = await fetch(`${url}/rest/v1/countries?select=*&order=code.asc`, {
+    // Explicit columns (not *): countries also carries about_content
+    // (jsonb, migration 0012) which only the About page needs — keep it
+    // out of the middleware's per-request cache.
+    const cols = 'code,name,subdomain,currency_code,currency_symbol,betting_sites,payments_enabled,active,coming_soon'
+    const res = await fetch(`${url}/rest/v1/countries?select=${cols}&order=code.asc`, {
       headers: { apikey: key, authorization: `Bearer ${key}` },
       cache: 'no-store',
     })
