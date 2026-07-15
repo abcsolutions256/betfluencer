@@ -254,7 +254,10 @@ create table countries (
   payments_enabled boolean not null default false,
   active           boolean not null default false,
   coming_soon      boolean not null default true,
-  created_at       timestamptz not null default now()
+  created_at       timestamptz not null default now(),
+  -- Per-market About-page copy (migration 0012). Shape = AboutContent in
+  -- src/lib/aboutContent.ts; null → the app falls back to the code copy.
+  about_content    jsonb
 );
 
 -- Tipster ↔ country visibility (many-to-many). Every pre-expansion
