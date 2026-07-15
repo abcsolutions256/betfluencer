@@ -3,13 +3,13 @@ import './globals.css'
 import { CountryProvider } from '@/components/CountryProvider'
 
 export const metadata: Metadata = {
-  title: 'Betfluencer — Football Tips Uganda',
-  description: 'Subscribe to top football tipsters in Uganda. Pay with Mobile Money. No account needed.',
+  title: 'Betfluencer — Football Tipster Marketplace',
+  description: 'Subscribe to top football tipsters across Africa. Pay with mobile money. No account needed.',
   manifest: '/manifest.json',
   icons: { icon: '/icon.png', apple: '/apple-icon.png' },
   openGraph: {
     title: 'Betfluencer',
-    description: 'Top football tips. Pay with MTN or Airtel Money.',
+    description: 'Top football tips from Africa’s best tipsters. Pay with mobile money.',
     siteName: 'Betfluencer',
   },
 }
