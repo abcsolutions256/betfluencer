@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
 
 type TipsterRow = {
@@ -79,6 +80,7 @@ const th: React.CSSProperties = { fontSize: 10, color: '#9ca3af', fontWeight: 50
 const COLORS = ['#2ECC7A', '#F5A623', '#4A9EFF', '#FF6B6B', '#a855f7', '#3b82f6']
 
 export default function RankingsPage() {
+  const router = useRouter()
   const [tipsters, setTipsters] = useState<TipsterRow[]>([])
   const [loading, setLoading] = useState(true)
   const [showExtra, setShowExtra] = useState(false)
@@ -108,6 +110,8 @@ export default function RankingsPage() {
         @media (max-width: 640px) {
           .rk-optional { display: none !important; }
         }
+        /* Rows navigate to the tipster's channel — subtle hover/tap affordance */
+        .rk-row:hover, .rk-row:active { background: #eef2f7 !important; }
       `}</style>
       <TopBar />
       <main className="flex-1 overflow-y-auto pb-6">
@@ -178,7 +182,7 @@ export default function RankingsPage() {
                   const streak = streakLabel(t.last5 ?? '')
                   const roi = t.roi ?? 0
                   return (
-                    <tr key={t.id} style={{ background: rowBg }}>
+                    <tr key={t.id} className="rk-row" onClick={() => router.push(`/channel/${t.username}`)} style={{ background: rowBg, cursor: 'pointer' }}>
                       <td style={{ ...cellL, padding: '10px 4px 10px 0' }}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                           <div style={{ width: 3, height: 34, borderRadius: 2, background: barColor, marginRight: 6, flexShrink: 0 }} />
@@ -192,6 +196,7 @@ export default function RankingsPage() {
                             <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 3 }}>
                               {t.name}
                               {t.verified && <span style={{ color: '#0d9e5c', fontSize: 10 }}>✓</span>}
+                              <span style={{ color: '#9ca3af', fontSize: 11, fontWeight: 700 }}>›</span>
                             </div>
                             <div style={{ fontSize: 10, color: '#9ca3af' }}>{t.sport || 'Football'}</div>
                           </div>
