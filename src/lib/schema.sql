@@ -34,6 +34,7 @@ create table betslips (
   result_image_url     text default '',
   result_proof_pending boolean default false,
   posted_at            timestamptz default now(),
+  settled_at           timestamptz,         -- when result was last set to win/loss/void (0013)
   betting_site         text default null,   -- booking_code mode: which bookie
   booking_code         text default null    -- shareable bookie slip code
 );
@@ -106,6 +107,7 @@ create table platform_settings (
 
 -- ── INDEXES ──────────────────────────────────────────────────────
 create index idx_betslips_tipster    on betslips(tipster_id, posted_at desc);
+create index idx_betslips_settled_win on betslips(settled_at desc) where result = 'win';
 create index idx_legs_betslip        on betslip_legs(betslip_id);
 create index idx_purchases_phone     on slip_purchases(user_phone);
 create index idx_purchases_tipster   on slip_purchases(tipster_id);

@@ -42,7 +42,12 @@ export async function POST(req: NextRequest) {
   const slipResult = hasLoss ? 'loss' : allVoid ? 'void' : !hasPending ? 'win' : 'pending'
 
   await db.from('betslips')
-    .update({ result: slipResult, ...(slipResult !== 'pending' ? { result_proof_pending: false } : {}) })
+    .update({
+      result: slipResult,
+      // settled_at powers the Wins 24h window; a slip back at pending is unsettled.
+      settled_at: slipResult === 'pending' ? null : new Date().toISOString(),
+      ...(slipResult !== 'pending' ? { result_proof_pending: false } : {}),
+    })
     .eq('id', leg.betslip_id)
 
   return NextResponse.json({ success: true, legResult: result, slipResult })

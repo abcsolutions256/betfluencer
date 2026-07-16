@@ -39,6 +39,7 @@ function SlipCard({ row, unlocked, onBuy }: { row: Row; unlocked: boolean; onBuy
               <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)' }}>Betslip</span>
               <span style={{ background: 'var(--bg3)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20 }}>{games} games</span>
               <span style={{ background: risk.bg, color: risk.color, fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20, border: `1px solid ${risk.color}40` }}>{risk.label}</span>
+              {slip.result === 'win' && <span style={{ background: 'var(--green-lt)', color: 'var(--green)', fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 20, border: '1px solid rgba(46,204,122,0.45)' }}>WON ✓</span>}
               {finished
                 ? <span style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20 }}>Free</span>
                 : unlocked
@@ -94,6 +95,22 @@ export default function SlipsPage() {
   const [allSlips, setAllSlips] = useState<Row[]>([])
   const [buying, setBuying]   = useState<Row | null>(null)
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set())
+  // Live = the pending marketplace (unchanged). Wins = winning slips settled
+  // in the last 24h (rolling window, free to view). Wins are fetched lazily
+  // on first toggle and kept in state — switching back and forth is instant.
+  const [view, setView] = useState<'live' | 'wins'>('live')
+  const [winsSlips, setWinsSlips] = useState<Row[] | null>(null)
+  const [winsLoading, setWinsLoading] = useState(false)
+
+  const showWins = () => {
+    setView('wins')
+    if (winsSlips === null && !winsLoading) {
+      setWinsLoading(true)
+      fetch('/api/slips/wins').then(r => r.json())
+        .then(d => { setWinsSlips(d.slips ?? []); setWinsLoading(false) })
+        .catch(() => { setWinsSlips([]); setWinsLoading(false) })
+    }
+  }
 
   useEffect(() => {
     fetch('/api/slips').then(r => r.json()).then(d => { setAllSlips(d.slips ?? []); setLoading(false) }).catch(() => setLoading(false))
@@ -107,7 +124,8 @@ export default function SlipsPage() {
 
   const oddsFilter = getOddsFilter(filter)
   const oddsQuery  = parseOddsQuery(query)
-  const filtered = allSlips.filter(({ slip, tipsterName }) => {
+  const source   = view === 'wins' ? (winsSlips ?? []) : allSlips
+  const filtered = source.filter(({ slip, tipsterName }) => {
     if (oddsQuery) return (slip.total_odds ?? 0) >= oddsQuery.min && (slip.total_odds ?? 0) <= oddsQuery.max + 0.99
     if (filter !== 'All' && ((slip.total_odds ?? 0) < oddsFilter.min || (slip.total_odds ?? 0) > oddsFilter.max)) return false
     if (query.trim() && !oddsQuery) { const q = query.toLowerCase(); return tipsterName.toLowerCase().includes(q) || (slip.total_odds ?? 0).toString().includes(q) }
@@ -125,7 +143,10 @@ export default function SlipsPage() {
             <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>Marketplace</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--white)' }}>Verified slips</div>
           </div>
-          <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 10, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'var(--gold)' }}>{liveCount} live</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setView('live')} style={{ background: view === 'live' ? 'var(--gold-lt)' : 'var(--bg3)', border: view === 'live' ? '1px solid rgba(245,166,35,0.3)' : '1px solid var(--line)', borderRadius: 10, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: view === 'live' ? 'var(--gold)' : 'var(--muted)', cursor: 'pointer' }}>{liveCount} live</button>
+            <button onClick={showWins} style={{ background: view === 'wins' ? 'var(--green-lt)' : 'var(--bg3)', border: view === 'wins' ? '1px solid rgba(46,204,122,0.3)' : '1px solid var(--line)', borderRadius: 10, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: view === 'wins' ? 'var(--green)' : 'var(--muted)', cursor: 'pointer' }}>Wins 24h</button>
+          </div>
         </div>
 
         <div style={{ padding: '12px 14px 0' }}>
@@ -141,17 +162,25 @@ export default function SlipsPage() {
             ))}
           </div>
 
-          {loading ? (
+          {(view === 'live' ? loading : winsLoading) ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}><Loader2 size={28} color="var(--gold)" className="spin" /></div>
           ) : (
             <>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>{filtered.length} slip{filtered.length !== 1 ? 's' : ''}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>{filtered.length} slip{filtered.length !== 1 ? 's' : ''}{view === 'wins' ? ' · won in the last 24h' : ''}</div>
               {filtered.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>
-                  <Ticket size={32} style={{ margin: '0 auto 10px', display: 'block', opacity: 0.4 }} />
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--offwhite)', marginBottom: 4 }}>No slips found</div>
-                  <div style={{ fontSize: 12 }}>Try a different odds range</div>
-                </div>
+                view === 'wins' && source.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>
+                    <Ticket size={32} style={{ margin: '0 auto 10px', display: 'block', opacity: 0.4 }} />
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--offwhite)', marginBottom: 4 }}>No winning slips in the last 24 hours yet</div>
+                    <div style={{ fontSize: 12 }}>Check back soon — wins land here as slips settle</div>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>
+                    <Ticket size={32} style={{ margin: '0 auto 10px', display: 'block', opacity: 0.4 }} />
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--offwhite)', marginBottom: 4 }}>No slips found</div>
+                    <div style={{ fontSize: 12 }}>Try a different odds range</div>
+                  </div>
+                )
               ) : filtered.map(row => <SlipCard key={row.slip.id} row={row} unlocked={unlocked.has(row.slip.id)} onBuy={() => setBuying(row)} />)}
             </>
           )}
