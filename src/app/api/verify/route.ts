@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       await db.from('betslips').update({ result_proof_pending: true }).eq('id', slip.id)
       reviewCount++
     } else {
-      await db.from('betslips').update({ result: slipResult, result_proof_pending: false }).eq('id', slip.id)
+      await db.from('betslips').update({ result: slipResult, result_proof_pending: false, settled_at: new Date().toISOString() }).eq('id', slip.id)
       verifiedCount++
     }
   }

@@ -24,10 +24,15 @@ export async function POST(req: NextRequest) {
     const db = supabaseServer()
 
     // Update the betslip result ('void' allowed once migration 0012 widens the
-    // result CHECK on betslips + betslip_legs).
+    // result CHECK on betslips + betslip_legs). settled_at stamps the settle
+    // time (powers the Wins 24h window); resetting to pending clears it.
     const { error: slipError } = await db
       .from('betslips')
-      .update({ result, result_proof_pending: false })
+      .update({
+        result,
+        result_proof_pending: false,
+        settled_at: result === 'pending' ? null : new Date().toISOString(),
+      })
       .eq('id', slip_id)
 
     if (slipError) return NextResponse.json({ error: slipError.message }, { status: 500 })
