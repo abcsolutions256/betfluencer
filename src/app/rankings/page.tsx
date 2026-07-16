@@ -110,7 +110,9 @@ export default function RankingsPage() {
         @media (max-width: 640px) {
           .rk-optional { display: none !important; }
         }
-        /* Rows navigate to the tipster's channel — subtle hover/tap affordance */
+        /* Rows navigate to the tipster channel — subtle hover/tap affordance.
+           NOTE: no apostrophes in this style block — Next escapes them in the
+           server HTML but not on the client, causing a hydration mismatch. */
         .rk-row:hover, .rk-row:active { background: #eef2f7 !important; }
       `}</style>
       <TopBar />
