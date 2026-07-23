@@ -23,9 +23,9 @@ npm run dev      # local dev → http://localhost:3000
 npm run build    # production build
 npm run start    # serve build
 npm run lint     # eslint (next lint)
-npm run test:e2e # Playwright e2e MERGE GATE — boots local Supabase + ioTec demo, 7 specs (scripts/e2e.sh)
+npm run test:e2e # Playwright e2e MERGE GATE — boots local Supabase + ioTec demo, 9 specs (scripts/e2e.sh)
 ```
-Tests: Playwright e2e in `tests/e2e/` (see `tests/e2e/README.md`). Prereq once: `npx playwright install chromium`. Covers home, tipster signup/login, manual-slip→verified+proof-only feed, coded-slip→pending+secret hidden, guest purchase (demo)→reveal entitlement, admin hide, rankings.
+Tests: Playwright e2e in `tests/e2e/` (see `tests/e2e/README.md`). Prereq once: `npx playwright install chromium`. Covers home, tipster signup/login, manual-slip→verified+proof-only feed, coded-slip→pending+secret hidden, guest purchase (demo)→reveal entitlement, admin hide, rankings, signups-closed gate, tipster profile edit (PATCH /api/tipster/me).
 
 ## Database
 Supabase CLI migrations: `supabase/config.toml` + `supabase/migrations/`. Apply with `npm run db:push` (or `supabase db reset` locally). Tables also mirrored in `src/lib/schema.sql` / `rls.sql` for reference.
