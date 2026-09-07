@@ -9,6 +9,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { marketFilterFromRequest } from '@/lib/countryFilter'
 import type { TxnStatus } from '@/types/payments'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   // Admin session required.
   if (!(await requireRole('admin'))) {

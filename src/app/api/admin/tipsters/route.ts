@@ -9,6 +9,8 @@ function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
 }
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const db = supabaseServer()
