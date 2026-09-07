@@ -16,6 +16,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { verifyAndRecord } from '@/lib/verifyCode'
 
+export const dynamic = 'force-dynamic'
+
 async function handler(req: NextRequest) {
   const token = req.headers.get('x-sync-token') ?? ''
   if (!process.env.SYNC_TOKEN || token !== process.env.SYNC_TOKEN) {

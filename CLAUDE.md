@@ -44,7 +44,7 @@ Note: `betslips`/`betslip_legs`/`slip_purchases` have **NO `created_at`** — do
 
 ## Conventions
 - API routes: `NextResponse.json`, **zod** `safeParse` on input, `rateLimit(name, ip)` at the top of mutating routes.
-- DB access only server-side via `supabaseServer()` (service role). Browser uses the anon client (`supabase`).
+- DB access only server-side via `supabaseServer()` (service role). There is **no browser DB client** — client components fetch via the API routes (the old unused anon `supabase` export was removed 2026-09-07; its eager `createClient` threw `supabaseUrl is required` at import and broke secret-free builds).
 - `db.ts` pattern: `const db = supabaseServer(); if (!db) return MOCK…` — the mock fallback is how it runs with no DB.
 - Money is **integer UGX** everywhere (no decimals). Phone normalised to `+256XXXXXXXXX` (`normalisePhone`).
 - Commission = `PLATFORM_COMMISSION` env (default `0.10`).
