@@ -3,6 +3,8 @@ import { supabaseServer } from '@/lib/supabase'
 import { requireRole } from '@/lib/auth/session'
 import { marketFilterFromRequest, filterByTipsterIds } from '@/lib/countryFilter'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   if (!(await requireRole('admin'))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const db = supabaseServer()
