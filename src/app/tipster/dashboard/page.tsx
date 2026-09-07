@@ -62,6 +62,12 @@ export default function TipsterDashboard() {
   const [postMode, setPostMode] = useState<'manual'|'screenshot'>('manual')
   const [postError, setPostError] = useState('')
 
+  // Profile editor (Profile tab). Seeded from the loaded tipster; phone is the
+  // login/payout identity and stays read-only here (admin-only change).
+  const [profileForm, setProfileForm] = useState({ name: '', username: '', description: '' })
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
   type ScreenshotSlip = {
     slip_price: number
     note: string
@@ -153,11 +159,35 @@ export default function TipsterDashboard() {
       if (!d?.tipster) { router.push('/tipster/login'); return }
       const id = d.tipster.id
       setTipster(d.tipster)
+      setProfileForm({ name: d.tipster.name ?? '', username: d.tipster.username ?? '', description: d.tipster.description ?? '' })
       fetch(`/api/tipster/${id}/stats`).then(r => r.json()).then(d => { if (d.stats) setStats(d.stats) })
       fetch(`/api/tipster/${id}/slips`).then(r => r.json()).then(d => { if (d.slips) setBetslips(d.slips) })
       fetch(`/api/tipster/${id}/earnings`).then(r => r.json()).then(d => { if (d.earnings) setEarnings(d.earnings) })
     })
   }, [router])
+
+  async function saveProfile() {
+    if (!tipster || profileSaving) return
+    setProfileSaving(true)
+    setProfileMsg(null)
+    try {
+      const res = await fetch('/api/tipster/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileForm),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setProfileMsg({ ok: false, text: d?.error ?? 'Could not save changes' }); return }
+      // Re-seed from the server's canonical row (e.g. username was slugified).
+      setTipster(d.tipster)
+      setProfileForm({ name: d.tipster.name ?? '', username: d.tipster.username ?? '', description: d.tipster.description ?? '' })
+      setProfileMsg({ ok: true, text: 'Profile saved.' })
+    } catch {
+      setProfileMsg({ ok: false, text: 'Network error. Please try again.' })
+    } finally {
+      setProfileSaving(false)
+    }
+  }
 
   async function postTip() {
     if (!tipster) return
@@ -567,21 +597,42 @@ export default function TipsterDashboard() {
         {tab === 'profile' && (
           <div className="card">
             <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)', marginBottom: 16 }}>Your public profile</div>
-            {[
-              { lbl: 'Display name',        type: 'text', val: tipster.name     },
-              { lbl: 'Username',            type: 'text', val: tipster.username },
-              { lbl: 'Mobile Money number', type: 'tel',  val: tipster.phone    },
-            ].map(f => (
-              <div key={f.lbl} style={{ marginBottom: 12 }}>
-                <label className="lbl">{f.lbl}</label>
-                <input className="inp" type={f.type} defaultValue={f.val} />
+            <div style={{ marginBottom: 12 }}>
+              <label className="lbl">Display name</label>
+              <input
+                className="inp" type="text" value={profileForm.name}
+                onChange={e => setProfileForm(f => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="lbl">Username</label>
+              <input
+                className="inp" type="text" value={profileForm.username}
+                onChange={e => setProfileForm(f => ({ ...f, username: e.target.value }))}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="lbl">Mobile Money number</label>
+              <input className="inp" type="tel" value={tipster.phone} disabled style={{ opacity: 0.55, cursor: 'not-allowed' }} />
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                Your number is your login and payout account. Contact the admin to change it.
               </div>
-            ))}
+            </div>
             <div style={{ marginBottom: 16 }}>
               <label className="lbl">Channel description</label>
-              <textarea className="inp" style={{ minHeight: 80, resize: 'none' }} defaultValue={tipster.description} />
+              <textarea
+                className="inp" style={{ minHeight: 80, resize: 'none' }} value={profileForm.description}
+                onChange={e => setProfileForm(f => ({ ...f, description: e.target.value }))}
+              />
             </div>
-            <button className="btn-green">Save changes</button>
+            {profileMsg && (
+              <div style={{ fontSize: 13, marginBottom: 10, color: profileMsg.ok ? 'var(--green)' : 'var(--red)' }}>
+                {profileMsg.text}
+              </div>
+            )}
+            <button className="btn-green" onClick={saveProfile} disabled={profileSaving} style={profileSaving ? { opacity: 0.7 } : undefined}>
+              {profileSaving ? 'Saving…' : 'Save changes'}
+            </button>
             <button
               className="btn-ghost mt-3"
               onClick={async () => {

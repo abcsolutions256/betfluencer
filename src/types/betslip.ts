@@ -24,6 +24,7 @@ export interface Betslip {
   leg_count:             number
   result:                SlipResult
   posted_at:             string
+  settled_at?:           string | null   // when result was last set to win/loss/void
   note?:                 string
   slip_price:            number
   slip_image_url?:       string

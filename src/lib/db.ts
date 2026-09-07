@@ -76,6 +76,35 @@ export async function createTipsterAccount(tipster: {
   return data
 }
 
+// Update the editable fields of a tipster's own profile. Only the columns
+// present in `patch` are written. Returns the updated row, or a typed reason:
+//   'no-db'          — mock mode (no service client configured)
+//   'username-taken' — unique-violation on username (23505)
+//   'error'          — any other DB error
+export async function updateTipster(
+  id: string,
+  patch: { name?: string; username?: string; description?: string },
+): Promise<
+  | { ok: true; tipster: any }
+  | { ok: false; reason: 'no-db' | 'username-taken' | 'error' }
+> {
+  const db = supabaseServer()
+  if (!db) return { ok: false, reason: 'no-db' }
+
+  const { data, error } = await db
+    .from('tipsters')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) {
+    if ((error as { code?: string }).code === '23505') return { ok: false, reason: 'username-taken' }
+    return { ok: false, reason: 'error' }
+  }
+  return { ok: true, tipster: data }
+}
+
 // ── EARNINGS LOG ─────────────────────────────────────────────────
 export async function logEarning(earning: {
   tipster_id:  string
