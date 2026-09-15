@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { FollowButton } from './FollowButton'
 import { ShieldCheck } from 'lucide-react'
 import type { TipsterPublic } from '@/types'
+import { useCountry } from '@/components/CountryProvider'
 
 export function VerifiedTick({ tickType }: { tickType: 'earned' | 'paid' | null }) {
   if (!tickType) return null
@@ -48,6 +49,8 @@ export function Avatar({ name, size = 48 }: { name: string; size?: number }) {
 }
 
 export function TipsterCard({ tipster, rank }: { tipster: TipsterPublic; rank: number }) {
+  const { country } = useCountry()
+  const freeMode = country.payments_enabled === false
   return (
     <div className="card" style={{ borderLeft: rank === 1 ? '3px solid var(--gold)' : undefined }}>
       <div className="flex items-start gap-3 mb-4">
@@ -78,9 +81,9 @@ export function TipsterCard({ tipster, rank }: { tipster: TipsterPublic; rank: n
         </div>
       </div>
 
-      {/* Per-slip pricing note */}
+      {/* Per-slip pricing note (free while payments are paused for open beta) */}
       <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: 'var(--offwhite)', fontWeight: 500 }}>
-        Pay per slip — buy only the tips you want
+        {freeMode ? '🎉 Free access — all picks unlocked, no payment needed' : 'Pay per slip — buy only the tips you want'}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 0 }}>

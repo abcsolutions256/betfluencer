@@ -40,10 +40,14 @@ function InlineBuyGate({ slip, tipsterName, onUnlock }: { slip: Betslip; tipster
 // the slip object. Revealed content is fetched server-side by <SlipReveal> only
 // when the buyer is entitled (finished / unlocked / owned).
 function BetslipCard({ slip, tipsterName, defaultOpen = false, owned = false, onPurchased }: { slip: Betslip; tipsterName?: string; defaultOpen?: boolean; owned?: boolean; onPurchased?: () => void }) {
+  const { country } = useCountry()
   const [open, setOpen]         = useState(defaultOpen)
   const [unlocked, setUnlocked] = useState(false)
   const finished = slip.result === 'win' || slip.result === 'loss' || slip.result === 'void'
-  const canView  = finished || unlocked || owned   // `owned` = already purchased (pre-loaded) → works cross-device
+  // Open beta: payments paused in this market → pending picks are free & public,
+  // no unlock step. When payments are on, gate as before (finished/unlocked/owned).
+  const freeMode = country.payments_enabled === false
+  const canView  = finished || unlocked || owned || freeMode   // `owned` = already purchased (pre-loaded) → works cross-device
   const totalOdds = slip.total_odds ?? 0
   const risk     = getRiskLabel(totalOdds || 1)
   const games    = slip.game_count ?? slip.leg_count ?? 0

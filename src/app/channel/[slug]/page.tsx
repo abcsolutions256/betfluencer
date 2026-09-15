@@ -7,6 +7,7 @@ import { Avatar, VerifiedTick } from '@/components/ui'
 import { BetslipFeed } from '@/components/ui/BetslipFeed'
 import { WinRateBadge } from '@/components/ui/WinHistory'
 import { FollowButton } from '@/components/ui/FollowButton'
+import { useCountry } from '@/components/CountryProvider'
 import type { TipsterPublic } from '@/types'
 import type { Betslip } from '@/types/betslip'
 
@@ -17,6 +18,8 @@ export default function ChannelPage() {
   const [slips,   setSlips]   = useState<Betslip[]>([])
   const [tab,     setTab]     = useState<'slips' | 'about'>('slips')
   const [loading, setLoading] = useState(true)
+  const { country } = useCountry()
+  const freeMode = country.payments_enabled === false
 
   // Fetch the tipster's betslips. Public PROOF only — secrets stay server-side
   // and are unlocked per-slip via /reveal. Exposed as a callback so a fresh
@@ -74,7 +77,9 @@ export default function ChannelPage() {
         <FollowButton tipsterId={tipster.id} />
 
         <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: 12, padding: '10px 14px', marginTop: 10, fontSize: 12, color: 'var(--offwhite)', fontWeight: 500, lineHeight: 1.5 }}>
-          ⚡ Pay per slip — buy only the tips you want. Finished slips are free to view.
+          {freeMode
+            ? '🎉 Free access — every pick is unlocked, no payment needed while we’re in open beta.'
+            : '⚡ Pay per slip — buy only the tips you want. Finished slips are free to view.'}
         </div>
       </div>
 

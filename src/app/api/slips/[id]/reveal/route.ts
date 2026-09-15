@@ -1,13 +1,18 @@
 // ── GET /api/slips/[id]/reveal ────────────────────────────────────
 // The unlock. Finished slips (win/loss) are free → content returned to anyone.
-// Pending slips: content (incl. the screenshot) returned ONLY to a buyer with
-// an active purchase for this slip — identified by the PHONE they paid with
-// (`x-buyer-phone` header / `?buyer=` — no login) — OR the owning tipster
-// (session). The secret lives in betslip_secrets (service-role only) +
-// betslip_legs + slip_verifications — never in a list.
+// Pending slips: gated by market. While a market has payments PAUSED
+// (`payments_enabled=false`, the open-beta default — migration 0014), pending
+// content is FREE and PUBLIC to everyone. When payments are on, content is
+// returned ONLY to a buyer with an active purchase (identified by the PHONE
+// they paid with, `x-buyer-phone` / `?buyer=`) OR the owning tipster (session).
+// The secret lives in betslip_secrets (service-role only) + betslip_legs +
+// slip_verifications — never in a list. RLS on betslip_secrets stays closed;
+// de-paywalling happens only here, coupled to payments_enabled, so flipping
+// payments back on restores the paywall with no code change.
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/auth/session'
 import { buyerFromRequest } from '@/lib/buyer'
+import { getActiveCountry } from '@/lib/country'
 import { supabaseServer } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +25,11 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (!slip) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const finished = slip.result === 'win' || slip.result === 'loss'
 
-  if (!finished) {
+  // Open beta: when the active market isn't charging, pending picks are public.
+  const country  = await getActiveCountry(req)
+  const freeMode = !country.payments_enabled
+
+  if (!finished && !freeMode) {
     const buyer = buyerFromRequest(req)
 
     let purchased = false

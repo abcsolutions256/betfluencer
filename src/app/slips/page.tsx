@@ -18,11 +18,13 @@ function Chip({ children }: { children: React.ReactNode }) {
 
 function SlipCard({ row, unlocked, onBuy }: { row: Row; unlocked: boolean; onBuy: () => void }) {
   const { slip, tipsterName, tipsterUsername } = row
-  const { fmtMoney } = useCountry()
+  const { fmtMoney, country } = useCountry()
   const router   = useRouter()
   const [open, setOpen] = useState(false)
   const finished = slip.result === 'win' || slip.result === 'loss'
-  const canView  = finished || unlocked
+  // Open beta: payments paused → pending picks free & public, no purchase.
+  const freeMode = country.payments_enabled === false
+  const canView  = finished || unlocked || freeMode
   const risk     = getRiskLabel(slip.total_odds ?? 1)
   const games    = slip.game_count ?? slip.leg_count ?? 0
   const leagues  = slip.leagues ?? []
@@ -67,7 +69,7 @@ function SlipCard({ row, unlocked, onBuy }: { row: Row; unlocked: boolean; onBuy
       <div style={{ padding: '10px 14px 12px', borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {canView ? (
           <>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>{finished ? 'Free to view' : 'Unlocked ✓'}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>{finished || freeMode ? 'Free to view' : 'Unlocked ✓'}</span>
             <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--bg3)', color: 'var(--offwhite)', border: '1px solid var(--line)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
               {open ? <>Hide <ChevronUp size={13} /></> : <>View slip <ChevronDown size={13} /></>}
             </button>

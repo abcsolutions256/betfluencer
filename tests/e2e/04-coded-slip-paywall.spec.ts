@@ -9,7 +9,10 @@ import { admin } from './helpers'
 // test env the slip simply stays 'pending'. What the APP must guarantee here:
 //   • the slip is created with verification_status 'pending';
 //   • the booking code/site are stored in betslip_secrets (service-role only);
-//   • the public feed NEVER leaks the booking code (proof-only paywall).
+//   • the LIST feed NEVER carries the booking code (proof-only) — this holds
+//     even in the open-beta free mode: codes are served only by the per-slip
+//     reveal endpoint (public while payments are paused), never dumped into the
+//     marketplace list payload.
 test.describe('booking-code slip + paywall', () => {
   test('coded slip posts pending, secret stored, code never leaks to the feed', async ({ page }) => {
     await signUpTipster(page)
