@@ -1,11 +1,19 @@
 // Post one or more slips. The poster is resolved from the session (must be
 // a tipster). Secrets (booking code/site, screenshot URL) go to
-// betslip_secrets — never onto betslips. Booking-code slips start
-// 'pending' and are verified by the worker; manual/screenshot slips have
-// no code to scrape, so they're 'verified' on post (proof derived now).
+// betslip_secrets — never onto betslips.
+//
+// Verification status by mode:
+//   • manual / screenshot — always 'verified' on post (no code to scrape;
+//     proof derived from the legs now).
+//   • booking_code — in the FREE sharing model (payments paused, the
+//     open-beta default) the code is shared as-is and shown immediately, so
+//     it's 'verified' on post too and the bet-code worker is not needed.
+//     When payments are ON, it starts 'pending' and the worker verifies it
+//     against the bookie (the paid-product gate) — unchanged.
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { getMyTipster } from '@/lib/auth/session'
+import { getActiveCountry } from '@/lib/country'
 import { verifyAndRecord } from '@/lib/verifyCode'
 
 export const dynamic = 'force-dynamic'
@@ -23,12 +31,17 @@ export async function POST(req: NextRequest) {
     const db = supabaseServer()
     const inserted: any[] = []
 
+    // Free sharing model (payments paused) → booking-code slips are shared
+    // as-is and shown immediately, so they skip the worker gate.
+    const country  = await getActiveCountry(req)
+    const freeMode = !country.payments_enabled
+
     for (const slip of slips) {
       // Input method, by priority: booking_code -> screenshot -> manual
       const mode: 'booking_code' | 'screenshot' | 'manual' =
         slip.booking_code ? 'booking_code' : slip.slip_image_url ? 'screenshot' : 'manual'
       const legs: any[] = slip.legs ?? []
-      const status = mode === 'booking_code' ? 'pending' : 'verified'
+      const status = (mode === 'booking_code' && !freeMode) ? 'pending' : 'verified'
 
       const totalOdds = slip.total_odds !== '' && slip.total_odds != null
         ? parseFloat(slip.total_odds) : null
@@ -50,8 +63,10 @@ export async function POST(req: NextRequest) {
           result:              'pending',
           verification_status: status,
           verified_at:         status === 'verified' ? new Date().toISOString() : null,
-          // proof for manual/screenshot (booking-code proof comes from verify)
-          game_count:          mode === 'booking_code' ? null : (legs.length || null),
+          // proof for manual/screenshot (booking-code proof comes from verify;
+          // in free mode a coded slip shows the tipster-entered leg count so
+          // the card isn't blank).
+          game_count:          mode === 'booking_code' ? (freeMode ? legCount : null) : (legs.length || null),
           leagues:             mode === 'booking_code' ? [] : uniq(legs.map((l: any) => l.league)),
           markets:             mode === 'booking_code' ? [] : uniq(legs.map((l: any) => l.market)),
         })
@@ -90,8 +105,10 @@ export async function POST(req: NextRequest) {
         if (legsError) console.error('Legs insert error:', legsError)
       }
 
-      // 4) booking-code slips: verify against the bookie (sets verified + proof on success)
-      if (mode === 'booking_code') {
+      // 4) booking-code slips (paid mode only): verify against the bookie via
+      // the worker (sets verified + proof on success). In free mode the slip
+      // is already 'verified' and shown as-is — the worker isn't invoked.
+      if (mode === 'booking_code' && !freeMode) {
         verifyAndRecord(bs.id, slip.betting_site, slip.booking_code).catch(() => {})
       }
 

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Plus, Send, Wallet, BarChart2, User, Home, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, Plus, Send, BarChart2, User, Home, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { ResultPill } from '@/components/ui'
 import { ImageUpload } from '@/components/ui/ImageUpload'
 import type { Tipster } from '@/types'
@@ -40,13 +40,6 @@ type Betslip = {
   locked?: boolean
 }
 
-type Earning = {
-  id: string
-  amount: number
-  gross: number
-  user_phone: string
-  created_at: string
-}
 
 export default function TipsterDashboard() {
   const router = useRouter()
@@ -57,7 +50,6 @@ export default function TipsterDashboard() {
   const [tipster, setTipster] = useState<Tipster | null>(null)
   const [stats, setStats] = useState<Stats>({ subscriber_count:0, wins_last_10:0, avg_odds:0, rank:0, total_earned:0, slips_posted:0 })
   const [betslips, setBetslips] = useState<Betslip[]>([])
-  const [earnings, setEarnings] = useState<Earning[]>([])
   const [posting, setPosting] = useState(false)
   const [postMode, setPostMode] = useState<'manual'|'screenshot'>('manual')
   const [postError, setPostError] = useState('')
@@ -162,7 +154,6 @@ export default function TipsterDashboard() {
       setProfileForm({ name: d.tipster.name ?? '', username: d.tipster.username ?? '', description: d.tipster.description ?? '' })
       fetch(`/api/tipster/${id}/stats`).then(r => r.json()).then(d => { if (d.stats) setStats(d.stats) })
       fetch(`/api/tipster/${id}/slips`).then(r => r.json()).then(d => { if (d.slips) setBetslips(d.slips) })
-      fetch(`/api/tipster/${id}/earnings`).then(r => r.json()).then(d => { if (d.earnings) setEarnings(d.earnings) })
     })
   }, [router])
 
@@ -261,15 +252,9 @@ export default function TipsterDashboard() {
     { key: 'home',    label: 'Home',     Icon: Home      },
     { key: 'post',    label: 'Post tip', Icon: Plus      },
     { key: 'myslips', label: 'My Slips', Icon: BarChart2 },
-    { key: 'earn',    label: 'Earnings', Icon: Wallet    },
     { key: 'stats',   label: 'Stats',    Icon: BarChart2 },
     { key: 'profile', label: 'Profile',  Icon: User      },
   ]
-
-  const thisMonthEarnings = earnings.filter(e => new Date(e.created_at) >= new Date(new Date().getFullYear(), new Date().getMonth(), 1))
-  const thisMonthGross = thisMonthEarnings.reduce((a, e) => a + (e.gross || 0), 0)
-  const thisMonthNet   = thisMonthEarnings.reduce((a, e) => a + (e.amount || 0), 0)
-  const totalEarned    = earnings.reduce((a, e) => a + (e.amount || 0), 0)
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -297,7 +282,7 @@ export default function TipsterDashboard() {
                 { val: stats.subscriber_count.toLocaleString(),       label: 'Buyers',         color: 'var(--white)' },
                 { val: `${stats.wins_last_10}/10`,                    label: 'Wins (28 days)', color: 'var(--green)' },
                 { val: stats.rank > 0 ? `#${stats.rank}` : '--',     label: 'Platform rank',  color: 'var(--white)' },
-                { val: '90%',                                         label: 'Your cut',       color: 'var(--gold)'  },
+                { val: stats.slips_posted.toString(),                label: 'Slips posted',   color: 'var(--gold)'  },
               ].map(m => (
                 <div key={m.label} className="card" style={{ marginBottom: 0 }}>
                   <div style={{ fontSize: m.val.length > 6 ? 16 : 24, fontWeight: 800, color: m.color }}>{m.val}</div>
@@ -306,7 +291,7 @@ export default function TipsterDashboard() {
               ))}
             </div>
             <button className="btn-gold mb-3" onClick={() => setTab('post')}><Plus size={16} /> Post a new tip</button>
-            <button className="btn-ghost" onClick={() => setTab('earn')}><Wallet size={16} style={{ display: 'inline', marginRight: 6 }} />View earnings history</button>
+            <button className="btn-ghost" onClick={() => setTab('myslips')}><BarChart2 size={16} style={{ display: 'inline', marginRight: 6 }} />View my slips</button>
             <div className="section-label mt-4">Recent slips</div>
             {betslips.length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '24px 0' }}>No slips posted yet</div>}
             {betslips.slice(0, 4).map(b => (
@@ -318,11 +303,9 @@ export default function TipsterDashboard() {
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                       {b.booking_code
-                        ? <>Code: <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{b.booking_code}</span> · </>
-                        : b.locked
-                          ? <>Code: <span style={{ color: 'var(--gold)', fontWeight: 700 }}>🔒 hidden until sold</span> · </>
-                          : ''}
-                      {fmtMoney(b.slip_price || 0)}
+                        ? <>Code: <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{b.booking_code}</span></>
+                        : ''}
+                      {b.posted_at ? `${b.booking_code ? ' · ' : ''}${new Date(b.posted_at).toLocaleDateString()}` : ''}
                     </div>
                   </div>
                   <ResultPill result={b.result as any} />
@@ -390,8 +373,6 @@ export default function TipsterDashboard() {
                         ))}
                       </div>
                     )}
-                    <label className="lbl" style={{ color: 'var(--gold)' }}>Price ({country.currency_code})</label>
-                    <input className="inp" type="number" value={ss.slip_price || ''} onChange={e => updateScreenshotSlip(si, 'slip_price', parseInt(e.target.value) || 0)} />
                     <label className="lbl">Note (optional)</label>
                     <input className="inp" value={ss.note} onChange={e => updateScreenshotSlip(si, 'note', e.target.value)} />
                   </div>
@@ -417,10 +398,6 @@ export default function TipsterDashboard() {
                           <Trash2 size={13} color="var(--red)" />
                         </button>
                       )}
-                    </div>
-                    <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
-                      <label className="lbl" style={{ color: 'var(--gold)' }}>Price ({country.currency_code})</label>
-                      <input className="inp" type="number" placeholder="e.g. 1500" value={slip.slip_price || ''} onChange={e => setSlips(s => s.map((sl, i) => i === si ? { ...sl, slip_price: parseInt(e.target.value) || 0 } : sl))} />
                     </div>
                     <label className="lbl">Betting site</label>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
@@ -479,7 +456,7 @@ export default function TipsterDashboard() {
                 <div className="flex justify-between items-center">
                   <div>
                     <div style={{ fontSize:13, fontWeight:800, color:'var(--white)' }}>{b.betting_site || 'Slip'} · {b.leg_count ?? b.game_count ?? norm.length} legs · ×{b.total_odds ?? '—'}</div>
-                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{fmtMoney(b.slip_price||0)}{b.posted_at ? ` · ${new Date(b.posted_at).toLocaleDateString()}` : ''}</div>
+                    <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{b.posted_at ? new Date(b.posted_at).toLocaleDateString() : ''}</div>
                   </div>
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5 }}>
                     {b.posting_mode === 'booking_code' && <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, color:v.color, background:v.bg, whiteSpace:'nowrap' }}>{v.label}</span>}
@@ -530,45 +507,6 @@ export default function TipsterDashboard() {
           </div>
         )}
 
-        {/* EARNINGS */}
-        {tab === 'earn' && (
-          <>
-            <div style={{ background: 'var(--green-lt)', border: '1px solid rgba(46,204,122,0.25)', borderRadius: 16, padding: '14px 16px', marginBottom: 16, display: 'flex', gap: 12 }}>
-              <span style={{ fontSize: 22, flexShrink: 0 }}>⚡</span>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--white)', marginBottom: 4 }}>Instant payouts</div>
-                <div style={{ fontSize: 12, color: 'var(--offwhite)', lineHeight: 1.6 }}>90% of every purchase goes straight to your Mobile Money instantly.</div>
-              </div>
-            </div>
-            <div className="section-label">This month</div>
-            <div className="card" style={{ padding: '6px 16px', marginBottom: 14 }}>
-              {[
-                { label: 'Gross collected',    val: fmtMoney(thisMonthGross),                          color: 'var(--offwhite)' },
-                { label: 'Platform fee (10%)', val: `− ${fmtMoney(Math.round(thisMonthGross * 0.1))}`, color: 'var(--muted)'    },
-                { label: 'Sent to your MoMo',  val: fmtMoney(thisMonthNet),                            color: 'var(--green)'    },
-              ].map((r, i) => (
-                <div key={r.label} className="flex justify-between py-3" style={{ borderBottom: i < 2 ? '1px solid var(--line)' : 'none' }}>
-                  <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>{r.label}</span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: r.color }}>{r.val}</span>
-                </div>
-              ))}
-            </div>
-            <div className="section-label">Recent payouts</div>
-            <div className="card" style={{ padding: '4px 16px' }}>
-              {earnings.length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)', padding: '16px 0', textAlign: 'center' }}>No earnings yet</div>}
-              {earnings.slice(0, 10).map((e, i) => (
-                <div key={e.id} className="flex justify-between items-center py-3" style={{ borderBottom: i < Math.min(earnings.length, 10) - 1 ? '1px solid var(--line)' : 'none' }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--offwhite)' }}>Slip purchase</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{new Date(e.created_at).toLocaleString()}</div>
-                  </div>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--green)' }}>+{fmtMoney(e.amount || 0)}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
         {/* STATS */}
         {tab === 'stats' && (
           <>
@@ -584,11 +522,6 @@ export default function TipsterDashboard() {
                   <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>{m.label}</div>
                 </div>
               ))}
-            </div>
-            <div className="section-label">All-time earnings</div>
-            <div className="card" style={{ textAlign: 'center', padding: '20px 16px' }}>
-              <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--green)' }}>{fmtMoney(totalEarned)}</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Total sent to your Mobile Money</div>
             </div>
           </>
         )}
