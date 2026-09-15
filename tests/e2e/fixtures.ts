@@ -23,7 +23,7 @@ export async function signUpTipster(page: Page): Promise<TipsterCreds> {
   await page.goto('/tipster/signup')
   await page.getByPlaceholder('Display name').fill(creds.name)
   await page.getByPlaceholder('Username (public, e.g. enzo)').fill(creds.username)
-  await page.getByPlaceholder('Mobile Money number (your login + payout)').fill(creds.phone)
+  await page.getByPlaceholder('Phone number (your login)').fill(creds.phone)
   await page.getByPlaceholder('Password (min 8, incl. a number)').fill(creds.password)
   await page.getByPlaceholder('Sport / leagues you cover').fill('Premier League')
 
@@ -38,7 +38,7 @@ export async function signUpTipster(page: Page): Promise<TipsterCreds> {
 // Log in via the tipster login UI (phone + password); lands on the dashboard.
 export async function loginTipster(page: Page, creds: TipsterCreds) {
   await page.goto('/tipster/login')
-  await page.getByPlaceholder('Mobile Money number').fill(creds.phone)
+  await page.getByPlaceholder('Phone number').fill(creds.phone)
   await page.getByPlaceholder('Password').fill(creds.password)
   await page.getByRole('button', { name: 'Log in' }).click()
   await expect(page).toHaveURL(/\/tipster\/dashboard/, { timeout: 30_000 })
