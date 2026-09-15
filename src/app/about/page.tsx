@@ -114,7 +114,7 @@ export default async function AboutPage() {
         {/* ── HOW IT WORKS FOR TIPSTERS ── */}
         <div style={S.section}>
           <span style={S.label}>For tipsters</span>
-          <h2 style={S.h2}>Turn your knowledge into income</h2>
+          <h2 style={S.h2}>Share your tips with the community</h2>
           <p style={S.p}>{c.tipsterIntro}</p>
           {c.tipsterSteps.map((s, i) => <Step key={i} n={i + 1} title={s.title} desc={s.desc} />)}
         </div>
@@ -150,7 +150,7 @@ export default async function AboutPage() {
 
         {/* ── PAYMENTS ── */}
         <div style={S.section}>
-          <span style={S.label}>Payments</span>
+          <span style={S.label}>Access</span>
           <h2 style={S.h2}>{c.paymentsHeading}</h2>
           <p style={S.p}>{c.paymentsIntro}</p>
           <div style={S.card}>
