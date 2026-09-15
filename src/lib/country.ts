@@ -46,6 +46,16 @@ export const DEFAULT_COUNTRY: Country = {
   coming_soon: false,
 }
 
+// ISO country code → international dialing code (digits, no '+'). Defaults the
+// phone-number prefix per market on signup/login and drives normalisePhone.
+// Uganda is the fallback (matches normalisePhone's historical default).
+export const DIAL_CODES: Record<string, string> = {
+  UG: '256', NG: '234', GH: '233', ZA: '27', KE: '254',
+}
+export function dialCode(code: string | null | undefined): string {
+  return DIAL_CODES[(code ?? '').toUpperCase()] ?? DIAL_CODES.UG
+}
+
 export const COUNTRY_HEADER  = 'x-country'           // set by middleware, read by routes
 export const OVERRIDE_COOKIE = 'bf_country_override' // persisted ?country= dev override
 export const REMEMBER_COOKIE = 'bf_country'          // "remember my choice" on /welcome

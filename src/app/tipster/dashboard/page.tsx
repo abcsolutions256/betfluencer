@@ -612,10 +612,10 @@ export default function TipsterDashboard() {
               />
             </div>
             <div style={{ marginBottom: 12 }}>
-              <label className="lbl">Mobile Money number</label>
+              <label className="lbl">Phone number</label>
               <input className="inp" type="tel" value={tipster.phone} disabled style={{ opacity: 0.55, cursor: 'not-allowed' }} />
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                Your number is your login and payout account. Contact the admin to change it.
+                Your number is your login. Contact the admin to change it.
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>

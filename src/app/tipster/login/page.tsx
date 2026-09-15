@@ -3,9 +3,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
+import { useCountry } from '@/components/CountryProvider'
+import { dialCode } from '@/lib/country'
 
 export default function TipsterLoginPage() {
   const router = useRouter()
+  const { country } = useCountry()
+  const dial = dialCode(country.code)
   const [phone, setPhone]       = useState('')
   const [password, setPassword] = useState('')
   const [err, setErr]           = useState('')
@@ -37,11 +41,11 @@ export default function TipsterLoginPage() {
     <div style={shell}>
       <form onSubmit={submit} style={card}>
         <div style={title}>Tipster log in</div>
-        <div style={sub}>Manage your slips and earnings</div>
+        <div style={sub}>Manage and share your slips</div>
         {err && <div style={errorBox}>{err}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={prefix}>+256</div>
-          <input style={{ ...input, flex: 1 }} type="tel" placeholder="Mobile Money number" value={phone} onChange={e => setPhone(e.target.value)} autoFocus />
+          <div style={prefix}>+{dial}</div>
+          <input style={{ ...input, flex: 1 }} type="tel" placeholder="Phone number" value={phone} onChange={e => setPhone(e.target.value)} autoFocus />
         </div>
         <input style={input} type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
         <button style={btn} disabled={loading || !phone || !password}>

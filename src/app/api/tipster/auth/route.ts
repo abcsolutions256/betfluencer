@@ -11,7 +11,7 @@ import { getTipsterByPhone, createTipsterAccount } from '@/lib/db'
 import { createSession } from '@/lib/auth/session'
 import { supabaseServer } from '@/lib/supabase'
 import { publicSignupsEnabled } from '@/lib/settings'
-import { getActiveCountry } from '@/lib/country'
+import { getActiveCountry, dialCode } from '@/lib/country'
 import { linkTipsterToCountry } from '@/lib/countryFilter'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +46,11 @@ export async function POST(req: NextRequest) {
     const parsed = loginSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
 
-    const phone   = normalisePhone(parsed.data.phone)
+    // Normalise with the active market's dialing code so a local number
+    // entered on e.g. ng.betfluencer.org resolves to +234… (a leading '+' or
+    // '0' in the input is still handled regardless of market).
+    const country = await getActiveCountry(req)
+    const phone   = normalisePhone(parsed.data.phone, dialCode(country.code))
     const tipster = await getTipsterByPhone(phone)
     if (!tipster) return NextResponse.json({ error: 'No account found for this number' }, { status: 401 })
     if (!verifyPassword(parsed.data.password, tipster.password_hash ?? ''))
@@ -69,7 +73,10 @@ export async function POST(req: NextRequest) {
     const strength = isStrongPassword(parsed.data.password)
     if (!strength.ok) return NextResponse.json({ error: strength.reason }, { status: 400 })
 
-    const phone = normalisePhone(parsed.data.phone)
+    // Signup market → dialing code for the phone, and (below) the tipster's
+    // country link. A local number defaults to this market's code (+256/+234/…).
+    const country = await getActiveCountry(req)
+    const phone = normalisePhone(parsed.data.phone, dialCode(country.code))
     if (await getTipsterByPhone(phone))
       return NextResponse.json({ error: 'An account with this number already exists' }, { status: 409 })
 
@@ -91,7 +98,6 @@ export async function POST(req: NextRequest) {
     // a link failure never blocks signup; UG shows unfiltered on error).
     const db = supabaseServer()
     if (db) {
-      const country = await getActiveCountry(req)
       await linkTipsterToCountry(db, tipster.id, country.code)
     }
 
