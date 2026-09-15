@@ -15,7 +15,8 @@ import { signUpTipster } from './fixtures'
 // unchanged `!freeMode` branch in the route.
 test.describe('free public access (open beta)', () => {
   test('any anonymous visitor reveals a pending slip’s code with no purchase', async ({ page, request }) => {
-    // A tipster posts a pending coded slip (secret stored in betslip_secrets).
+    // A tipster posts a coded slip (verified in free mode; secret stored in
+    // betslip_secrets — the reveal below serves it to anyone).
     await signUpTipster(page)
     const code = 'E2EOPEN1'
     const postRes = await page.request.post('/api/tips', {

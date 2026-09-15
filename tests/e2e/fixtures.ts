@@ -57,15 +57,14 @@ export async function loginAdmin(page: Page, password: string) {
 // asserts. `legCount` and `odds` are strings as the form stores them.
 export async function postManualSlip(
   page: Page,
-  opts: { price: number; odds: string; legCount: string; note?: string },
+  opts: { odds: string; legCount: string; note?: string },
 ) {
   // Open the Post tab.
   await page.getByRole('button', { name: 'Post tip' }).click()
   // Manual mode is the default; make sure the manual form is visible.
   await expect(page.getByText('Post betslips')).toBeVisible()
 
-  // Price (the gold-boxed input with placeholder "e.g. 1500").
-  await page.getByPlaceholder('e.g. 1500').fill(String(opts.price))
+  // In the free open-beta model there is no price input (payments paused).
   // Total odds + legs. Since the 2026-07-02 form change these are the two
   // optional "Auto from code" inputs (odds first, then leg count) — normally
   // left blank for a coded slip; manual specs still set them explicitly.

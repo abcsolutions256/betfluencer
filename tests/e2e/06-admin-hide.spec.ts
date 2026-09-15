@@ -10,7 +10,7 @@ test.describe('admin hide', () => {
     // ── A tipster posts a verified slip ──
     const tipster = await signUpTipster(page)
     const odds = '9.15'
-    await postManualSlip(page, { price: 1200, odds, legCount: '4' })
+    await postManualSlip(page, { odds, legCount: '4' })
 
     // Resolve its id from the feed. Cache-bust the URL — Playwright's
     // APIRequestContext caches GET responses, which would return a stale feed.
@@ -49,7 +49,9 @@ test.describe('admin hide', () => {
     // ── But the tipster still sees it on their dashboard, tagged Hidden ──
     await page.goto('/tipster/dashboard')
     await expect(page.getByText('Tipster dashboard')).toBeVisible()
-    await page.getByRole('button', { name: 'My Slips' }).click()
+    // exact:true — the dashboard now also has a "View my slips" button, which
+    // 'My Slips' would match under substring mode (strict-mode violation).
+    await page.getByRole('button', { name: 'My Slips', exact: true }).click()
     await expect(page.getByText('Hidden by admin').first()).toBeVisible({ timeout: 30_000 })
     // The slip card (its odds) is still on the dashboard.
     await expect(page.getByText(`×${odds}`).first()).toBeVisible()
