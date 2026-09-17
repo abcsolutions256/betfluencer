@@ -193,6 +193,30 @@ function determineResult(pick: string, data: {
   // it, so never auto-settle; leave it for an admin to settle manually.
   if (/\b1\s*up\b/.test(pick)) return 'unverifiable'
 
+  // MATCH RESULT (1X2) — grade off the STRUCTURED side, never the free-text
+  // pick. A raw bookie label like "2 1X2 Full Time" fails the exact "away win"
+  // / bare "2" tests below and then collides with the `.includes('1x')`
+  // double-chance branch (from the "1X2" substring), which grades the OPPOSITE
+  // of a "2" (away) pick — a winning away pick becomes a loss and sinks the
+  // whole slip. The parser already resolved side (home/away/draw); trust it,
+  // with a deterministic symbol fallback, and NEVER fall through to the loose
+  // string matcher for a 1X2 leg. (Fixes the Elche 2-3 Real Madrid mis-grade.)
+  if (meta?.market === 'match_result') {
+    let side = (meta.side ?? '').toLowerCase()
+    if (side !== 'home' && side !== 'away' && side !== 'draw') {
+      // Derive the 1/X/2 symbol from the label: trailing "- 2" (worker format)
+      // or a leading "2 " (OCR format). Anything else → manual settle.
+      const sym = (pick.match(/[-:]\s*([12x])\s*$/i)?.[1]
+                ?? pick.match(/^\s*([12x])\b/i)?.[1]
+                ?? '').toLowerCase()
+      side = sym === '1' ? 'home' : sym === '2' ? 'away' : sym === 'x' ? 'draw' : ''
+    }
+    if (side === 'home') return homeGoals >  awayGoals ? 'win' : 'loss'
+    if (side === 'away') return awayGoals >  homeGoals ? 'win' : 'loss'
+    if (side === 'draw') return homeGoals === awayGoals ? 'win' : 'loss'
+    return 'unverifiable'   // couldn't resolve the side → leave for manual settle
+  }
+
   // TEAM TOTAL — "Croatia Over 0.5 Goals" means CROATIA's goals, not the match
   // total. Must run BEFORE the generic over/under below (which uses totalGoals
   // and would otherwise mis-grade this). Grades off the subject team's goals.

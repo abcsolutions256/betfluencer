@@ -2,12 +2,12 @@
 import { useState, useEffect } from 'react'
 import {
   Shield, Home, Users, BarChart2, ShieldCheck,
-  Loader2, LogOut, Receipt, Eye, EyeOff, CheckCircle, Globe
+  Loader2, LogOut, Receipt, Eye, EyeOff, CheckCircle, Globe, Scale, History
 } from 'lucide-react'
 import type { TransactionRow, TxnStatus } from '@/types/payments'
 import type { Country } from '@/lib/country'
 
-type AdminTab = 'overview' | 'ads' | 'tipsters' | 'slips' | 'transactions' | 'revenue' | 'verify' | 'review' | 'markets'
+type AdminTab = 'overview' | 'ads' | 'tipsters' | 'slips' | 'transactions' | 'revenue' | 'verify' | 'review' | 'audit' | 'markets'
 
 // 'UG' → 🇺🇬 (regional-indicator pair; renders as letters on Windows).
 const flag = (code: string) =>
@@ -180,6 +180,140 @@ function ReviewTab({ market, sym }: { market: string; sym: string }) {
           </div>
         </div>
       ))}
+    </>
+  )
+}
+
+// ── AUDIT TAB ─────────────────────────────────────────────────────
+// Review slips the grader has ALREADY settled (auto or manual) and overturn a
+// wrong decision — per-leg or the whole slip. Every change is logged server-
+// side to betslip_settlement_audit and shown in the slip's history.
+function AuditTab({ market }: { market: string }) {
+  const [slips, setSlips]   = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<'all' | 'win' | 'loss' | 'void'>('all')
+  const [busy, setBusy]     = useState<string | null>(null)
+  const [open, setOpen]     = useState<string | null>(null)   // which slip's history is expanded
+
+  function load() {
+    setLoading(true)
+    fetch(`/api/admin/audit?market=${market}&result=${filter}&t=${Date.now()}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => { setSlips(d.slips ?? []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [market, filter])
+
+  async function overrideSlip(slipId: string, result: 'win' | 'loss' | 'void' | 'pending') {
+    setBusy(slipId)
+    await fetch('/api/admin/audit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ betslip_id: slipId, result }),
+    }).catch(() => {})
+    setBusy(null); load()
+  }
+
+  async function overrideLeg(slipId: string, legId: string, legResult: 'win' | 'loss' | 'void' | 'pending') {
+    setBusy(legId)
+    await fetch('/api/admin/audit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ betslip_id: slipId, leg_id: legId, leg_result: legResult }),
+    }).catch(() => {})
+    setBusy(null); load()
+  }
+
+  const badge = (r: string) => {
+    const map: Record<string, [string, string]> = {
+      win: ['var(--green)', 'var(--green-lt)'], loss: ['var(--red)', 'var(--red-lt)'],
+      void: ['var(--muted)', 'var(--bg3)'], pending: ['var(--gold)', 'var(--gold-lt)'],
+    }
+    const [c, bg] = map[r] ?? ['var(--muted)', 'var(--bg3)']
+    return <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, color: c, background: bg, textTransform: 'uppercase' }}>{r ?? '—'}</span>
+  }
+
+  const LegBtn = ({ on, color, bg, label, onClick, busyKey }: any) => (
+    <button onClick={onClick} disabled={busy === busyKey}
+      style={{ padding: '3px 8px', borderRadius: 7, fontSize: 10, fontWeight: 800, cursor: 'pointer', border: `1px solid ${on ? color : 'var(--line)'}`, background: on ? bg : 'var(--bg3)', color: on ? color : 'var(--muted)' }}>{label}</button>
+  )
+
+  return (
+    <>
+      <div style={{ background: 'var(--gold-lt)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 12, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: 'var(--offwhite)', lineHeight: 1.6 }}>
+        Audit slips the grader already settled. If auto-verification got a leg or a slip wrong, overturn it here — the tipster&apos;s record and ranking update instantly. Every change is logged.
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {(['all', 'win', 'loss', 'void'] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            style={{ flex: 1, padding: '7px 0', borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize', border: `1px solid ${filter === f ? 'var(--gold)' : 'var(--line)'}`, background: filter === f ? 'var(--gold-lt)' : 'var(--bg3)', color: filter === f ? 'var(--gold)' : 'var(--muted)' }}>
+            {f === 'all' ? 'All' : f === 'win' ? 'Won' : f === 'loss' ? 'Lost' : 'Void'}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px 0' }}><Loader2 size={22} color="var(--gold)" className="spin" style={{ margin: '0 auto', display: 'block' }} /></div>
+      ) : slips.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', fontSize: 13 }}>No settled slips in this view</div>
+      ) : slips.map(slip => {
+        const legs = slip.betslip_legs ?? []
+        const when = slip.settled_at ? new Date(slip.settled_at).toLocaleString('en-UG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
+        return (
+          <div key={slip.id} className="card" style={{ borderLeft: `3px solid ${slip.result === 'win' ? 'var(--green)' : slip.result === 'loss' ? 'var(--red)' : 'var(--gold)'}`, marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)' }}>{slip.tipsters?.name ?? 'Unknown'} · ×{(slip.total_odds || 0).toFixed(2)}</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{legs.length} legs · {slip.posting_mode} · settled {when}</div>
+              </div>
+              {badge(slip.result)}
+            </div>
+
+            {legs.map((leg: any, i: number) => (
+              <div key={leg.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: i > 0 ? '1px solid var(--line)' : '1px solid var(--line)' }}>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 11, color: 'var(--offwhite)' }}>
+                  <span style={{ color: 'var(--muted)' }}>{leg.match}</span> · <span style={{ color: 'var(--gold)' }}>{leg.pick}</span>
+                  {leg.fixture_id && <span style={{ color: 'var(--muted)', fontSize: 9 }}> · fx {leg.fixture_id}</span>}
+                </div>
+                {leg.id && (
+                  <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                    <LegBtn on={leg.result === 'win'}  color="var(--green)" bg="var(--green-lt)" label="W" busyKey={leg.id} onClick={() => overrideLeg(slip.id, leg.id, 'win')} />
+                    <LegBtn on={leg.result === 'loss'} color="var(--red)"   bg="var(--red-lt)"   label="L" busyKey={leg.id} onClick={() => overrideLeg(slip.id, leg.id, 'loss')} />
+                    <LegBtn on={leg.result === 'void'} color="var(--muted)" bg="var(--bg3)"       label="V" busyKey={leg.id} onClick={() => overrideLeg(slip.id, leg.id, 'void')} />
+                    <LegBtn on={!leg.result || leg.result === 'pending'} color="var(--gold)" bg="var(--gold-lt)" label="—" busyKey={leg.id} onClick={() => overrideLeg(slip.id, leg.id, 'pending')} />
+                  </div>
+                )}
+              </div>
+            ))}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 5, marginTop: 10 }}>
+              <button disabled={busy === slip.id} onClick={() => overrideSlip(slip.id, 'win')}  style={{ padding: '8px 0', background: slip.result === 'win' ? 'var(--green-lt)' : 'var(--bg3)', color: slip.result === 'win' ? 'var(--green)' : 'var(--muted)', border: `1px solid ${slip.result === 'win' ? 'rgba(46,204,122,0.4)' : 'var(--line)'}`, borderRadius: 9, fontSize: 11, fontWeight: 800, cursor: 'pointer', opacity: busy === slip.id ? 0.5 : 1 }}>Won</button>
+              <button disabled={busy === slip.id} onClick={() => overrideSlip(slip.id, 'loss')} style={{ padding: '8px 0', background: slip.result === 'loss' ? 'var(--red-lt)' : 'var(--bg3)', color: slip.result === 'loss' ? 'var(--red)' : 'var(--muted)', border: `1px solid ${slip.result === 'loss' ? 'rgba(255,107,107,0.4)' : 'var(--line)'}`, borderRadius: 9, fontSize: 11, fontWeight: 800, cursor: 'pointer', opacity: busy === slip.id ? 0.5 : 1 }}>Lost</button>
+              <button disabled={busy === slip.id} onClick={() => overrideSlip(slip.id, 'void')} style={{ padding: '8px 0', background: 'var(--bg3)', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 9, fontSize: 11, fontWeight: 800, cursor: 'pointer', opacity: busy === slip.id ? 0.5 : 1 }}>Void</button>
+              <button disabled={busy === slip.id} onClick={() => overrideSlip(slip.id, 'pending')} style={{ padding: '8px 0', background: 'var(--bg3)', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 9, fontSize: 11, fontWeight: 800, cursor: 'pointer', opacity: busy === slip.id ? 0.5 : 1 }}>Reopen</button>
+            </div>
+
+            {(slip.audit ?? []).length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <button onClick={() => setOpen(open === slip.id ? null : slip.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: 'var(--muted)', fontSize: 10, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+                  <History size={11} /> {slip.audit.length} override{slip.audit.length > 1 ? 's' : ''} logged {open === slip.id ? '▲' : '▼'}
+                </button>
+                {open === slip.id && (
+                  <div style={{ marginTop: 6, paddingLeft: 4, borderLeft: '2px solid var(--line)' }}>
+                    {slip.audit.map((a: any, i: number) => (
+                      <div key={i} style={{ fontSize: 10, color: 'var(--muted)', padding: '3px 0 3px 8px' }}>
+                        <span style={{ color: 'var(--offwhite)' }}>{a.field === 'leg_result' ? 'leg' : 'slip'}</span>: {a.old_value ?? '—'} → <span style={{ color: 'var(--white)', fontWeight: 700 }}>{a.new_value}</span>
+                        <span style={{ opacity: 0.7 }}> · {a.source} · {new Date(a.created_at).toLocaleString('en-UG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                        {a.note && <span style={{ opacity: 0.7 }}> · {a.note}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </>
   )
 }
@@ -864,6 +998,7 @@ export default function AdminPage() {
           { key: 'revenue',      icon: BarChart2,    label: 'Revenue'  },
           { key: 'verify',       icon: ShieldCheck,  label: 'Verify'   },
           { key: 'review',       icon: CheckCircle,  label: 'Settle'   },
+          { key: 'audit',        icon: Scale,        label: 'Audit'    },
         ] as { key: AdminTab; icon: any; label: string }[]).map(({ key, icon: Icon, label }) => (
           <button key={key} onClick={() => setTab(key)} style={{ flex: 1, padding: '10px 4px 8px', border: 'none', background: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, borderBottom: `2px solid ${tab === key ? 'var(--gold)' : 'transparent'}` }}>
             <Icon size={17} color={tab === key ? 'var(--gold)' : 'rgba(255,255,255,0.3)'} />
@@ -958,6 +1093,8 @@ export default function AdminPage() {
 
         {/* ── SETTLE (slip settlement) ── */}
         {tab === 'review' && <ReviewTab market={market} sym={sym} />}
+
+        {tab === 'audit' && <AuditTab market={market} />}
       </div>
     </div>
   )
