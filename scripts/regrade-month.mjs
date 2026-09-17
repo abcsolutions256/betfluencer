@@ -92,7 +92,8 @@ function slipFromLegs(rs) {
       }
       if (newSlip !== s.result) {
         await db.from('betslips').update({ result: newSlip, settled_at: newSlip === 'pending' ? null : new Date().toISOString(), result_proof_pending: newSlip === 'pending' }).eq('id', s.id)
-        await db.from('betslip_settlement_audit').insert({ betslip_id: s.id, actor: 'system', source: 'regrade', field: 'result', old_value: s.result, new_value: newSlip, note: '1X2 grader fix re-grade' }).catch(() => {})
+        const a = await db.from('betslip_settlement_audit').insert({ betslip_id: s.id, actor: 'system', source: 'regrade', field: 'result', old_value: s.result, new_value: newSlip, note: '1X2 grader fix re-grade' })
+        if (a.error && /relation .*betslip_settlement_audit/.test(a.error.message)) auditMissing = true
       }
     }
     console.log('')
