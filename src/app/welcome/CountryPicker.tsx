@@ -54,9 +54,9 @@ export default function CountryPicker({ countries }: { countries: Country[] }) {
           bet<span style={{ color: 'var(--gold)' }}>fluencer</span>
         </div>
         <p style={{ fontSize: 14, color: 'var(--offwhite)', lineHeight: 1.7, maxWidth: 400, margin: '0 auto' }}>
-          Africa&apos;s football tipster marketplace. Browse betslips from verified
-          tipsters, check their real win record, and pay only for the slips you
-          want. Finished slips are always free to view.
+          Africa&apos;s football tips community. Browse betslips from verified
+          tipsters, check their real win record, and see every pick — free.
+          Booking codes and screenshots, no payment, no account needed.
         </p>
       </div>
 
@@ -117,7 +117,7 @@ export default function CountryPicker({ countries }: { countries: Country[] }) {
       </label>
 
       <div style={{ marginTop: 'auto', paddingTop: 36, textAlign: 'center', fontSize: 11, color: 'var(--muted)', lineHeight: 1.7 }}>
-        Pay per slip · No subscriptions · 18+ only, bet responsibly
+        Free to use · No subscriptions · 18+ only, bet responsibly
       </div>
     </div>
   )
