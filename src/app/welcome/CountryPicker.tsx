@@ -65,40 +65,54 @@ export default function CountryPicker({ countries }: { countries: Country[] }) {
         Choose your country
       </div>
 
-      {sorted.map(c => (
-        <button
-          key={c.code}
-          onClick={() => choose(c)}
-          disabled={!c.active}
-          aria-label={c.active ? `Continue to Betfluencer ${c.name}` : `${c.name} — coming soon`}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 12, width: '100%',
-            background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 14,
-            padding: '14px 16px', marginBottom: 10, textAlign: 'left',
-            cursor: c.active ? 'pointer' : 'default',
-            opacity: c.active ? 1 : 0.55,
-          }}
-        >
-          <span style={{ fontSize: 26, lineHeight: 1 }}>{flag(c.code)}</span>
-          <span style={{ flex: 1 }}>
-            <span style={{ display: 'block', fontSize: 15, fontWeight: 800, color: 'var(--white)' }}>{c.name}</span>
-            <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-              {c.currency_code} · {c.subdomain}.{MAIN_DOMAIN}
+      {sorted.map(c => {
+        const rowStyle = {
+          display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+          background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 14,
+          padding: '14px 16px', marginBottom: 10, textAlign: 'left' as const,
+          cursor: c.active ? 'pointer' : 'default',
+          opacity: c.active ? 1 : 0.55, textDecoration: 'none',
+        }
+        const inner = (
+          <>
+            <span style={{ fontSize: 26, lineHeight: 1 }}>{flag(c.code)}</span>
+            <span style={{ flex: 1 }}>
+              <span style={{ display: 'block', fontSize: 15, fontWeight: 800, color: 'var(--white)' }}>{c.name}</span>
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                {c.currency_code} · {c.subdomain}.{MAIN_DOMAIN}
+              </span>
             </span>
-          </span>
-          {c.active ? (
-            <span style={{ color: 'var(--gold)', fontSize: 18, fontWeight: 800 }}>›</span>
-          ) : (
-            <span style={{
-              background: 'var(--gold-lt)', color: 'var(--gold)', fontSize: 10, fontWeight: 800,
-              textTransform: 'uppercase', letterSpacing: 0.8, padding: '4px 10px',
-              borderRadius: 20, border: '1px solid rgba(245,166,35,0.3)', flexShrink: 0,
-            }}>
-              Coming soon
-            </span>
-          )}
-        </button>
-      ))}
+            {c.active ? (
+              <span style={{ color: 'var(--gold)', fontSize: 18, fontWeight: 800 }}>›</span>
+            ) : (
+              <span style={{
+                background: 'var(--gold-lt)', color: 'var(--gold)', fontSize: 10, fontWeight: 800,
+                textTransform: 'uppercase', letterSpacing: 0.8, padding: '4px 10px',
+                borderRadius: 20, border: '1px solid rgba(245,166,35,0.3)', flexShrink: 0,
+              }}>
+                Coming soon
+              </span>
+            )}
+          </>
+        )
+        // Live markets are REAL links to their subdomain (crawl discovery);
+        // onClick still runs choose() for the remember-cookie behaviour.
+        return c.active ? (
+          <a
+            key={c.code}
+            href={`https://${c.subdomain}.${MAIN_DOMAIN}/`}
+            onClick={e => { e.preventDefault(); choose(c) }}
+            aria-label={`Continue to Betfluencer ${c.name}`}
+            style={rowStyle}
+          >
+            {inner}
+          </a>
+        ) : (
+          <div key={c.code} aria-label={`${c.name} — coming soon`} style={rowStyle}>
+            {inner}
+          </div>
+        )
+      })}
 
       {/* ── Remember my choice ── */}
       <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, cursor: 'pointer', userSelect: 'none' }}>

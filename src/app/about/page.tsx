@@ -4,6 +4,7 @@ import { headers, cookies } from 'next/headers'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
 import { getAboutContent, type AboutContent } from '@/lib/aboutContent'
 import { COUNTRY_HEADER, OVERRIDE_COOKIE } from '@/lib/country'
+import { marketAlternates } from '@/lib/seo'
 
 // Per-market copy is resolved per request (x-country header from
 // middleware) and may come from the DB — never prerender this page.
@@ -26,6 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: c.meta.title,
     description: c.meta.description,
     keywords: c.meta.keywords,
+    alternates: await marketAlternates('/about'),
     openGraph: {
       title: c.meta.ogTitle,
       description: c.meta.ogDescription,
