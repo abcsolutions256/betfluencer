@@ -6,20 +6,20 @@ const MAIN_DOMAIN = process.env.NEXT_PUBLIC_MAIN_DOMAIN || 'betfluencer.org'
 
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${MAIN_DOMAIN}`),
-  title: 'Betfluencer — Football Tipster Marketplace',
-  description: 'Subscribe to top football tipsters across Africa. Pay with mobile money. No account needed.',
+  title: 'Betfluencer — Free Football Tips',
+  description: 'Follow top football tipsters across Africa. Booking codes and screenshots, shared free — no payments, no account needed.',
   manifest: '/manifest.json',
   icons: { icon: '/icon.png', apple: '/apple-icon.png' },
   openGraph: {
     title: 'Betfluencer',
-    description: 'Top football tips from Africa’s best tipsters. Pay with mobile money.',
+    description: 'Free football tips from Africa’s best tipsters — booking codes and screenshots, shared openly.',
     siteName: 'Betfluencer',
     images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Betfluencer' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Betfluencer',
-    description: 'Top football tips from Africa’s best tipsters. Pay with mobile money.',
+    description: 'Free football tips from Africa’s best tipsters — booking codes and screenshots, shared openly.',
     images: ['/og-image.png'],
   },
 }

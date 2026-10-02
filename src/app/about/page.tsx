@@ -4,6 +4,7 @@ import { headers, cookies } from 'next/headers'
 import { TopBar, BottomNav } from '@/components/layout/Navigation'
 import { getAboutContent, type AboutContent } from '@/lib/aboutContent'
 import { COUNTRY_HEADER, OVERRIDE_COOKIE } from '@/lib/country'
+import { marketAlternates } from '@/lib/seo'
 
 // Per-market copy is resolved per request (x-country header from
 // middleware) and may come from the DB — never prerender this page.
@@ -26,6 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: c.meta.title,
     description: c.meta.description,
     keywords: c.meta.keywords,
+    alternates: await marketAlternates('/about'),
     openGraph: {
       title: c.meta.ogTitle,
       description: c.meta.ogDescription,
@@ -114,7 +116,7 @@ export default async function AboutPage() {
         {/* ── HOW IT WORKS FOR TIPSTERS ── */}
         <div style={S.section}>
           <span style={S.label}>For tipsters</span>
-          <h2 style={S.h2}>Turn your knowledge into income</h2>
+          <h2 style={S.h2}>Share your tips with the community</h2>
           <p style={S.p}>{c.tipsterIntro}</p>
           {c.tipsterSteps.map((s, i) => <Step key={i} n={i + 1} title={s.title} desc={s.desc} />)}
         </div>
@@ -150,7 +152,7 @@ export default async function AboutPage() {
 
         {/* ── PAYMENTS ── */}
         <div style={S.section}>
-          <span style={S.label}>Payments</span>
+          <span style={S.label}>Access</span>
           <h2 style={S.h2}>{c.paymentsHeading}</h2>
           <p style={S.p}>{c.paymentsIntro}</p>
           <div style={S.card}>

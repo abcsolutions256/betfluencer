@@ -4,7 +4,7 @@ import { signUpTipster } from './fixtures'
 // Feature 9 — Tipster profile edit (dashboard → Profile tab → Save changes).
 // The PATCH /api/tipster/me path: a tipster edits their own display name,
 // username and description; the username is slugified server-side; the phone
-// (login + payout identity) is read-only; a taken username is rejected.
+// (login identity) is read-only; a taken username is rejected.
 
 // The profile form has no placeholders/associated labels, so scope to its card.
 function profileCard(page: Page) {

@@ -1,17 +1,19 @@
 // ── Per-country About-page content ─────────────────────────────────
-// The About page copy varies by market (currency, betting sites, local
-// leagues, payment rails). Source of truth is `countries.about_content`
-// (jsonb, migration 0012) so copy can be edited without a deploy; the
-// ABOUT_CONTENT map below is the seed AND the fallback — if the column
-// is missing (migration not yet applied), the fetch fails, or the row
-// is null, each market still renders from code. UG's entry is the
-// pre-expansion About copy verbatim, so Uganda can never change from
-// this system existing.
+// The About page copy varies by market (local leagues, betting sites,
+// company framing). Source of truth is `countries.about_content` (jsonb,
+// migration 0012, updated by 0014's open-beta copy) so copy can be edited
+// without a deploy; the ABOUT_CONTENT map below is the seed AND the
+// fallback — if the column is missing, the fetch fails, or the row is
+// null, each market still renders from code.
+//
+// Betfluencer is a FREE, public betslip-sharing community — no payments,
+// no commission, no payouts. The copy here reflects that; there is no
+// "pay per slip" / Mobile Money language anywhere.
 //
 // Country-neutral sections (verification, contact) stay hardcoded in
 // src/app/about/page.tsx.
 //
-// NOTE for tooling: scripts/generate-about-seed.js eval()s the object
+// NOTE for tooling: scripts/generate-about-seed.js parses the object
 // literal assigned to ABOUT_CONTENT to emit the migration seed SQL —
 // keep the const LAST in this file and keep its body pure data
 // (strings/arrays/objects only).
@@ -93,336 +95,257 @@ export async function getAboutContent(code: string | null | undefined): Promise<
   }
 }
 
-// ── Content map: seed + fallback. UG is verbatim pre-expansion copy. ──
+// ── Shared free-model copy ─────────────────────────────────────────
+// Sections that don't change per market. Built once and spread into each
+// market so the wording stays consistent; markets override only the
+// locally-specific bits (name, sites, leagues, company copy).
+
+const ACCESS_ROWS = [
+  { label: 'Cost', val: 'Free' },
+  { label: 'Subscriptions', val: 'None' },
+  { label: 'Unlock fees', val: 'None' },
+  { label: 'Who can post', val: 'Any registered tipster' },
+  { label: 'Who can view', val: 'Everyone' },
+]
+
+const PAYMENTS_HEADING = 'Free & open, for everyone'
+const PAYMENTS_INTRO =
+  'Betfluencer is completely free. No unlock fees, no subscriptions, no payouts — it is a community for sharing football tips, not a shop. Anyone can register and post, and everyone can view.'
+
+const TIPSTER_INTRO =
+  'Got a good eye for football? Share your betslips with the whole community and build a public track record. Here is how it works:'
+
+function tipsterSteps(): { title: string; desc: string }[] {
+  return [
+    { title: 'Create your channel', desc: 'Sign up with your phone number and set up your public tipster channel. Your channel shows your win rate, average odds, and full performance history.' },
+    { title: 'Post your slips', desc: 'Share a booking code or upload a screenshot, add the betting platform, and post. Put up as many slips as you like, at any odds — everything you post is free for the community to see.' },
+    { title: 'Build your following', desc: 'There are no fees and nothing to sell — you share tips to grow your audience. Every result is tracked automatically, so a strong run puts you in front of more followers.' },
+    { title: 'Earn your reputation', desc: 'Your win rate and rankings are calculated automatically from your results over the last 28 days. Consistent winners earn a verified tick and rise up the rankings — bringing more followers to their channel.' },
+  ]
+}
+
+function bettorSteps(sites: string): { title: string; desc: string }[] {
+  return [
+    { title: 'Browse the feed', desc: 'See every betslip posted by every tipster, free. Filter by odds range — from safe low-risk slips to high-odds accumulators. Each slip shows the total odds, number of legs, and the tipster\'s win record.' },
+    { title: 'Check the tipster', desc: 'Tap any tipster chip to visit their channel. See their full 4-week performance record, win rate, average odds, streak, and their last 5 results — so you know exactly whose tips you are following.' },
+    { title: 'Open any pick, free', desc: 'Every slip is free to open — no payment, no unlock fee. Tap a slip to reveal the full booking code or screenshot instantly.' },
+    { title: 'Load the slip and bet', desc: `Use the booking code to load the full betslip on your betting platform — ${sites}, or any other. Place your bet and follow the results.` },
+    { title: 'Finished slips show results', desc: 'Once a slip\'s matches have all played out, the result is public for everyone. You can see exactly what a tipster picked and whether it won — building an honest, verifiable record.' },
+  ]
+}
+
+const EU_REGIONS = [
+  { region: '🏴󠁧󠁢󠁥󠁮󠁧󠁿 England', leagues: ['Premier League', 'Championship', 'FA Cup', 'EFL Trophy'] },
+  { region: '🌍 Europe', leagues: ['UEFA Champions League', 'UEFA Europa League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1'] },
+  { region: '🌎 Americas & Asia', leagues: ['MLS', 'Copa Libertadores', 'J-League', 'Saudi Pro League'] },
+]
+
+function sharedFaq(country: string, sites: string): { q: string; a: string }[] {
+  return [
+    { q: 'Is Betfluencer free to use?', a: 'Yes — completely. Viewing tipsters, opening betslips (booking codes and screenshots), and checking results are all free. There are no unlock fees and no subscriptions.' },
+    { q: 'How do I know a tipster is genuine?', a: 'Every tipster\'s win rate, average odds, and 4-week performance record is publicly visible. Booking codes can be verified on the relevant betting platform. Tipsters with a verified tick have earned it through consistent performance — it cannot be purchased.' },
+    { q: 'Are the tips guaranteed to win?', a: 'No. A tip is one person\'s opinion, and like all betting, results are never guaranteed. That is exactly why every tipster\'s full track record is public — follow the ones with a proven record, and always bet responsibly.' },
+    { q: 'Can I become a tipster?', a: 'Yes. Sign up through the Tipster tab, create your channel, and start posting slips. It is free — there are no fees and nothing to sell. You share tips to build your reputation and following.' },
+    { q: 'Which betting platforms are supported?', a: `Betfluencer works with any betting platform that supports booking codes — including ${sites}, and others.` },
+    { q: `Is Betfluencer available outside ${country}?`, a: 'Yes — Betfluencer runs free, dedicated communities across Africa. Visit betfluencer.org to choose your country.' },
+  ]
+}
+
+// ── Content map: seed + fallback (free open-beta copy). ────────────
 
 export const ABOUT_CONTENT: Record<string, AboutContent> = {
   UG: {
     meta: {
-      title: 'About Betfluencer — Uganda\'s Football Tipster Marketplace',
-      description: 'Betfluencer is Uganda\'s first marketplace connecting football betting tipsters with bettors. Discover verified tipsters, buy betslips, and bet smarter with real win-rate data.',
-      keywords: 'betfluencer, football tips uganda, betting tipsters uganda, sports betting uganda, betpawa tips, mtn mobile money betting',
+      title: 'About Betfluencer — Free Football Tips in Uganda',
+      description: 'Betfluencer is Uganda\'s free community for sharing and discovering football betslips. Follow verified tipsters, open booking codes and screenshots, and track real win rates — no payments, ever.',
+      keywords: 'betfluencer, free football tips uganda, betting tipsters uganda, booking codes uganda, betpawa tips, football predictions uganda',
       ogTitle: 'About Betfluencer',
-      ogDescription: 'Uganda\'s first football tipster marketplace. Buy betslips from verified tipsters and bet smarter.',
+      ogDescription: 'Uganda\'s free football betslip community. Follow verified tipsters and track real win rates — free.',
       ogUrl: 'https://betfluencer.org/about',
     },
-    heroTitle: ['Uganda\'s football', 'tipster marketplace'],
-    heroIntro: 'Betfluencer connects football bettors with Uganda\'s best tipsters. Browse betslips, check win rates, pay per slip, and bet smarter — all in one place.',
-    heroChips: ['MTN Mobile Money', 'Airtel Money', 'Uganda Premier League', 'Premier League', 'Champions League'],
-    whatHeading: 'The smartest way to bet in Uganda',
+    heroTitle: ['Uganda\'s football tips —', 'free & open'],
+    heroIntro: 'Betfluencer is where Uganda\'s football tipsters share their betslips — booking codes and screenshots — with everyone, free. Follow the sharpest tipsters, check real win rates, and load their picks on your own bookie.',
+    heroChips: ['Free to use', 'Uganda Premier League', 'Premier League', 'Champions League', 'BetPawa'],
+    whatHeading: 'Football tips, shared openly in Uganda',
     whatParas: [
-      'Betfluencer is a two-sided marketplace built specifically for the Ugandan betting market. On one side, skilled football tipsters post their betslips — complete with booking codes, odds, and their verified win record. On the other side, bettors browse those slips, pay only for the ones they want, and place their bets with more confidence.',
-      'We do not place bets for you. We do not hold your money. We simply connect you with tipsters who have a proven track record, and let you decide who to follow and which slips to buy.',
-      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly who you are buying from before you spend a single shilling.',
+      'Betfluencer is a free, public platform built for the Ugandan football community. Tipsters post their betslips — complete with booking codes or screenshots, odds, and their verified win record — and anyone can view them. No paywall, no fees.',
+      'We do not place bets for you and we do not handle any money. We simply give tipsters a place to share their picks and build a public track record, and give everyone else a transparent way to find tipsters worth following.',
+      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly whose tips you are following, backed by real results.',
     ],
-    bettorSteps: [
-      { title: 'Browse the marketplace', desc: 'See all available betslips from every tipster. Filter by odds range — from safe low-risk slips to high-odds accumulators. Every slip shows the total odds, number of legs, and the tipster\'s win record.' },
-      { title: 'Check the tipster', desc: 'Tap any tipster chip to visit their channel. See their full 4-week performance record, win rate, average odds, streak, and their last 5 results. Make an informed decision before you pay anything.' },
-      { title: 'Buy only what you want', desc: 'Pay per slip — no monthly subscriptions, no commitments. If you like a slip, pay for it once using MTN or Airtel Mobile Money. The booking code unlocks immediately after payment.' },
-      { title: 'Load the slip and bet', desc: 'Use the booking code to load the full betslip on your betting platform — BetPawa, Betway, SportPesa, Mozzart, or any other. Place your bet and follow the results.' },
-      { title: 'Finished slips are free', desc: 'Once a slip\'s matches have all played out, the result is public and free for everyone to view. You can see exactly what a tipster picked and whether it won — before buying their next slip.' },
-    ],
-    tipsterIntro: 'If you consistently pick winners, Betfluencer lets you earn from every bettor who buys your slip. Here is how it works:',
-    tipsterSteps: [
-      { title: 'Create your channel', desc: 'Sign up with your phone number and set up your public tipster channel. Your channel shows your win rate, average odds, and full performance history.' },
-      { title: 'Post betslips', desc: 'Enter your booking code and betting platform when you post a slip. Set your own price per slip — from UGX 500 to whatever you think it is worth. You can post multiple slips at different odds levels simultaneously.' },
-      { title: 'Earn per purchase', desc: 'Every time a bettor buys your slip, 90% of the payment goes straight to your Mobile Money account instantly. Betfluencer keeps 10% as a platform fee. No monthly fees, no minimum payouts, no waiting.' },
-      { title: 'Build your reputation', desc: 'Your win rate and rankings are calculated automatically from your results over the last 28 days. Consistent winners earn a verified tick and appear higher in the rankings — bringing more buyers to their channel.' },
-    ],
-    paymentsHeading: 'Simple, instant Mobile Money',
-    paymentsIntro: 'Betfluencer is built for Uganda. All payments are processed in Ugandan Shillings (UGX) via Mobile Money — no bank account, no credit card, no international payment hassle.',
-    paymentsRows: [
-      { label: 'Supported networks', val: 'MTN Uganda · Airtel Uganda' },
-      { label: 'Currency', val: 'Ugandan Shillings (UGX)' },
-      { label: 'Tipster payout', val: '90% of each slip purchase — instant' },
-      { label: 'Platform fee', val: '10% per transaction' },
-      { label: 'Subscriptions', val: 'None — pay per slip only' },
-      { label: 'Minimum purchase', val: 'Set by each tipster individually' },
-    ],
-    coverageIntro: 'Betfluencer supports tipsters covering any football league or competition that can be bet on — from local Ugandan football to the biggest European competitions.',
+    bettorSteps: bettorSteps('BetPawa, Betway, SportPesa, Mozzart'),
+    tipsterIntro: TIPSTER_INTRO,
+    tipsterSteps: tipsterSteps(),
+    paymentsHeading: PAYMENTS_HEADING,
+    paymentsIntro: PAYMENTS_INTRO,
+    paymentsRows: ACCESS_ROWS,
+    coverageIntro: 'Betfluencer tipsters cover any football league or competition — from local Ugandan football to the biggest European competitions.',
     coverageRegions: [
       { region: '🇺🇬 Uganda', leagues: ['Uganda Premier League', 'FUFA Big League', 'FUFA Women Super League'] },
       { region: '🌍 Africa', leagues: ['AFCON', 'CAF Champions League', 'Kenya Premier League', 'NPFL Nigeria', 'ABSA Premiership South Africa'] },
-      { region: '🏴󠁧󠁢󠁥󠁮󠁧󠁿 England', leagues: ['Premier League', 'Championship', 'FA Cup', 'EFL Trophy'] },
-      { region: '🌍 Europe', leagues: ['UEFA Champions League', 'UEFA Europa League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1'] },
-      { region: '🌎 Americas & Asia', leagues: ['MLS', 'Copa Libertadores', 'J-League', 'Saudi Pro League'] },
+      ...EU_REGIONS,
     ],
     companyHeading: 'Built in Uganda, for Uganda',
     companyParas: [
       'Betfluencer was built by ABC Input Solutions, a Ugandan technology company focused on building digital products that solve real problems for East African markets.',
-      'We noticed that Uganda has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp groups and social media — but no structured way to build a reputation, reach a wider audience, or earn fairly from their knowledge. At the same time, bettors had no reliable way to find and evaluate tipsters beyond word of mouth.',
-      'Betfluencer solves both problems. It gives tipsters a professional platform and a fair income stream, and gives bettors transparent, verifiable performance data to make smarter decisions.',
+      'Uganda has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp groups and social media — but no structured, public place to build a reputation or reach a wider audience. At the same time, bettors had no reliable way to find and evaluate tipsters beyond word of mouth.',
+      'Betfluencer gives them that place — free. It gives tipsters a professional platform and a public track record, and gives everyone else transparent, verifiable performance data to decide who to follow.',
     ],
-    faq: [
-      { q: 'Is Betfluencer free to use?', a: 'Browsing tipster channels and viewing finished slip results is completely free. You only pay when you choose to buy a specific pending slip.' },
-      { q: 'How do I know a tipster is genuine?', a: 'Every tipster\'s win rate, average odds, and 4-week performance record is publicly visible. Booking codes can be verified on the relevant betting platform. Tipsters with a verified tick have earned it through consistent performance — it cannot be purchased.' },
-      { q: 'What happens if I pay and the slip loses?', a: 'Slip purchases are for access to the tipster\'s pick — not a guarantee of winning. Like all betting, results are not guaranteed. This is why we encourage you to review a tipster\'s full track record before buying.' },
-      { q: 'Can I become a tipster?', a: 'Yes. Sign up through the Tipster tab, create your channel, and start posting slips. There are no upfront fees. You earn 90% of every slip purchase.' },
-      { q: 'Which betting platforms are supported?', a: 'Betfluencer works with any betting platform that supports booking codes — including BetPawa, Betway, SportPesa, Mozzart, 1xBet, and others.' },
-      { q: 'Is Betfluencer available outside Uganda?', a: 'Currently Betfluencer is optimised for Uganda with UGX pricing and MTN/Airtel Mobile Money payments. We plan to expand to Kenya, Tanzania, and Rwanda in future.' },
-    ],
+    faq: sharedFaq('Uganda', 'BetPawa, Betway, SportPesa, Mozzart, 1xBet'),
   },
 
   NG: {
     meta: {
-      title: 'About Betfluencer — Nigeria\'s Football Tipster Marketplace',
-      description: 'Betfluencer is Nigeria\'s marketplace connecting football betting tipsters with bettors. Discover verified tipsters, buy betslips, and bet smarter with real win-rate data.',
-      keywords: 'betfluencer, football tips nigeria, betting tipsters nigeria, sports betting nigeria, sportybet tips, npfl betting tips',
+      title: 'About Betfluencer — Free Football Tips in Nigeria',
+      description: 'Betfluencer is Nigeria\'s free community for sharing and discovering football betslips. Follow verified tipsters, open booking codes and screenshots, and track real win rates — no payments, ever.',
+      keywords: 'betfluencer, free football tips nigeria, betting tipsters nigeria, sportybet booking codes, npfl tips, football predictions nigeria',
       ogTitle: 'About Betfluencer',
-      ogDescription: 'Nigeria\'s football tipster marketplace. Buy betslips from verified tipsters and bet smarter.',
+      ogDescription: 'Nigeria\'s free football betslip community. Follow verified tipsters and track real win rates — free.',
       ogUrl: 'https://ng.betfluencer.org/about',
     },
-    heroTitle: ['Nigeria\'s football', 'tipster marketplace'],
-    heroIntro: 'Betfluencer connects football bettors with Nigeria\'s best tipsters. Browse betslips, check win rates, pay per slip, and bet smarter — all in one place.',
-    heroChips: ['SportyBet', '1xBet', 'NPFL', 'Premier League', 'Champions League'],
-    whatHeading: 'The smartest way to bet in Nigeria',
+    heroTitle: ['Nigeria\'s football tips —', 'free & open'],
+    heroIntro: 'Betfluencer is where Nigeria\'s football tipsters share their betslips — booking codes and screenshots — with everyone, free. Follow the sharpest tipsters, check real win rates, and load their picks on your own bookie.',
+    heroChips: ['Free to use', 'NPFL', 'Premier League', 'Champions League', 'SportyBet'],
+    whatHeading: 'Football tips, shared openly in Nigeria',
     whatParas: [
-      'Betfluencer is a two-sided marketplace built specifically for the Nigerian betting market. On one side, skilled football tipsters post their betslips — complete with booking codes, odds, and their verified win record. On the other side, bettors browse those slips, pay only for the ones they want, and place their bets with more confidence.',
-      'We do not place bets for you. We do not hold your money. We simply connect you with tipsters who have a proven track record, and let you decide who to follow and which slips to buy.',
-      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly who you are buying from before you spend a single naira.',
+      'Betfluencer is a free, public platform built for the Nigerian football community. Tipsters post their betslips — complete with booking codes or screenshots, odds, and their verified win record — and anyone can view them. No paywall, no fees.',
+      'We do not place bets for you and we do not handle any money. We simply give tipsters a place to share their picks and build a public track record, and give everyone else a transparent way to find tipsters worth following.',
+      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly whose tips you are following, backed by real results.',
     ],
-    bettorSteps: [
-      { title: 'Browse the marketplace', desc: 'See all available betslips from every tipster. Filter by odds range — from safe low-risk slips to high-odds accumulators. Every slip shows the total odds, number of legs, and the tipster\'s win record.' },
-      { title: 'Check the tipster', desc: 'Tap any tipster chip to visit their channel. See their full 4-week performance record, win rate, average odds, streak, and their last 5 results. Make an informed decision before you pay anything.' },
-      { title: 'Buy only what you want', desc: 'Pay per slip — no monthly subscriptions, no commitments. If you like a slip, pay for it once in Naira. The booking code unlocks immediately after payment.' },
-      { title: 'Load the slip and bet', desc: 'Use the booking code to load the full betslip on your betting platform — SportyBet, 1xBet, Betway, betPawa, or any other. Place your bet and follow the results.' },
-      { title: 'Finished slips are free', desc: 'Once a slip\'s matches have all played out, the result is public and free for everyone to view. You can see exactly what a tipster picked and whether it won — before buying their next slip.' },
-    ],
-    tipsterIntro: 'If you consistently pick winners, Betfluencer lets you earn from every bettor who buys your slip. Here is how it works:',
-    tipsterSteps: [
-      { title: 'Create your channel', desc: 'Sign up with your phone number and set up your public tipster channel. Your channel shows your win rate, average odds, and full performance history.' },
-      { title: 'Post betslips', desc: 'Enter your booking code and betting platform when you post a slip. Set your own price per slip — from ₦500 to whatever you think it is worth. You can post multiple slips at different odds levels simultaneously.' },
-      { title: 'Earn per purchase', desc: 'Every time a bettor buys your slip, 90% of the payment is yours. Betfluencer keeps 10% as a platform fee. No monthly fees, no minimum payouts, no waiting.' },
-      { title: 'Build your reputation', desc: 'Your win rate and rankings are calculated automatically from your results over the last 28 days. Consistent winners earn a verified tick and appear higher in the rankings — bringing more buyers to their channel.' },
-    ],
-    paymentsHeading: 'Simple, local payments in Naira',
-    paymentsIntro: 'Betfluencer Nigeria runs entirely in Naira. Pay with your debit card, bank transfer, or USSD — no international payment hassle.',
-    paymentsRows: [
-      { label: 'Supported methods', val: 'Cards · Bank transfer · USSD' },
-      { label: 'Currency', val: 'Nigerian Naira (₦)' },
-      { label: 'Tipster payout', val: '90% of each slip purchase' },
-      { label: 'Platform fee', val: '10% per transaction' },
-      { label: 'Subscriptions', val: 'None — pay per slip only' },
-      { label: 'Minimum purchase', val: 'Set by each tipster individually' },
-    ],
-    coverageIntro: 'Betfluencer supports tipsters covering any football league or competition that can be bet on — from the NPFL to the biggest European competitions.',
+    bettorSteps: bettorSteps('SportyBet, 1xBet, Betway, betPawa'),
+    tipsterIntro: TIPSTER_INTRO,
+    tipsterSteps: tipsterSteps(),
+    paymentsHeading: PAYMENTS_HEADING,
+    paymentsIntro: PAYMENTS_INTRO,
+    paymentsRows: ACCESS_ROWS,
+    coverageIntro: 'Betfluencer tipsters cover any football league or competition — from the NPFL to the biggest European competitions.',
     coverageRegions: [
       { region: '🇳🇬 Nigeria', leagues: ['NPFL', 'President Federation Cup'] },
       { region: '🌍 Africa', leagues: ['AFCON', 'CAF Champions League', 'Uganda Premier League', 'Kenya Premier League', 'ABSA Premiership South Africa'] },
-      { region: '🏴󠁧󠁢󠁥󠁮󠁧󠁿 England', leagues: ['Premier League', 'Championship', 'FA Cup', 'EFL Trophy'] },
-      { region: '🌍 Europe', leagues: ['UEFA Champions League', 'UEFA Europa League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1'] },
-      { region: '🌎 Americas & Asia', leagues: ['MLS', 'Copa Libertadores', 'J-League', 'Saudi Pro League'] },
+      ...EU_REGIONS,
     ],
     companyHeading: 'Built in Africa, for Nigeria',
     companyParas: [
       'Betfluencer was built by ABC Input Solutions, an African technology company focused on building digital products that solve real problems for markets across the continent.',
-      'Nigeria has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp, Telegram, and social media — but no structured way to build a reputation, reach a wider audience, or earn fairly from their knowledge. At the same time, bettors have no reliable way to find and evaluate tipsters beyond word of mouth.',
-      'Betfluencer solves both problems. It gives tipsters a professional platform and a fair income stream, and gives bettors transparent, verifiable performance data to make smarter decisions.',
+      'Nigeria has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp, Telegram, and social media — but no structured, public place to build a reputation or reach a wider audience. At the same time, bettors have no reliable way to find and evaluate tipsters beyond word of mouth.',
+      'Betfluencer gives them that place — free. It gives tipsters a professional platform and a public track record, and gives everyone else transparent, verifiable performance data to decide who to follow.',
     ],
-    faq: [
-      { q: 'Is Betfluencer free to use?', a: 'Browsing tipster channels and viewing finished slip results is completely free. You only pay when you choose to buy a specific pending slip.' },
-      { q: 'How do I know a tipster is genuine?', a: 'Every tipster\'s win rate, average odds, and 4-week performance record is publicly visible. Booking codes can be verified on the relevant betting platform. Tipsters with a verified tick have earned it through consistent performance — it cannot be purchased.' },
-      { q: 'What happens if I pay and the slip loses?', a: 'Slip purchases are for access to the tipster\'s pick — not a guarantee of winning. Like all betting, results are not guaranteed. This is why we encourage you to review a tipster\'s full track record before buying.' },
-      { q: 'Can I become a tipster?', a: 'Yes. Sign up through the Tipster tab, create your channel, and start posting slips. There are no upfront fees. You earn 90% of every slip purchase.' },
-      { q: 'Which betting platforms are supported?', a: 'Betfluencer works with any betting platform that supports booking codes — including SportyBet, 1xBet, Betway, betPawa, and others.' },
-      { q: 'Is Betfluencer available outside Nigeria?', a: 'Yes — Betfluencer runs dedicated markets across Africa, each with local pricing and payment methods. Visit betfluencer.org to choose your country.' },
-    ],
+    faq: sharedFaq('Nigeria', 'SportyBet, 1xBet, Betway, betPawa'),
   },
 
   GH: {
     meta: {
-      title: 'About Betfluencer — Ghana\'s Football Tipster Marketplace',
-      description: 'Betfluencer is Ghana\'s marketplace connecting football betting tipsters with bettors. Discover verified tipsters, buy betslips, and bet smarter with real win-rate data.',
-      keywords: 'betfluencer, football tips ghana, betting tipsters ghana, sports betting ghana, sportybet tips ghana, mtn momo betting',
+      title: 'About Betfluencer — Free Football Tips in Ghana',
+      description: 'Betfluencer is Ghana\'s free community for sharing and discovering football betslips. Follow verified tipsters, open booking codes and screenshots, and track real win rates — no payments, ever.',
+      keywords: 'betfluencer, free football tips ghana, betting tipsters ghana, sportybet booking codes ghana, ghana premier league tips, football predictions ghana',
       ogTitle: 'About Betfluencer',
-      ogDescription: 'Ghana\'s football tipster marketplace. Buy betslips from verified tipsters and bet smarter.',
+      ogDescription: 'Ghana\'s free football betslip community. Follow verified tipsters and track real win rates — free.',
       ogUrl: 'https://gh.betfluencer.org/about',
     },
-    heroTitle: ['Ghana\'s football', 'tipster marketplace'],
-    heroIntro: 'Betfluencer connects football bettors with Ghana\'s best tipsters. Browse betslips, check win rates, pay per slip, and bet smarter — all in one place.',
-    heroChips: ['MTN Mobile Money', 'SportyBet', 'Ghana Premier League', 'Premier League', 'Champions League'],
-    whatHeading: 'The smartest way to bet in Ghana',
+    heroTitle: ['Ghana\'s football tips —', 'free & open'],
+    heroIntro: 'Betfluencer is where Ghana\'s football tipsters share their betslips — booking codes and screenshots — with everyone, free. Follow the sharpest tipsters, check real win rates, and load their picks on your own bookie.',
+    heroChips: ['Free to use', 'Ghana Premier League', 'Premier League', 'Champions League', 'SportyBet'],
+    whatHeading: 'Football tips, shared openly in Ghana',
     whatParas: [
-      'Betfluencer is a two-sided marketplace built specifically for the Ghanaian betting market. On one side, skilled football tipsters post their betslips — complete with booking codes, odds, and their verified win record. On the other side, bettors browse those slips, pay only for the ones they want, and place their bets with more confidence.',
-      'We do not place bets for you. We do not hold your money. We simply connect you with tipsters who have a proven track record, and let you decide who to follow and which slips to buy.',
-      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly who you are buying from before you spend a single cedi.',
+      'Betfluencer is a free, public platform built for the Ghanaian football community. Tipsters post their betslips — complete with booking codes or screenshots, odds, and their verified win record — and anyone can view them. No paywall, no fees.',
+      'We do not place bets for you and we do not handle any money. We simply give tipsters a place to share their picks and build a public track record, and give everyone else a transparent way to find tipsters worth following.',
+      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly whose tips you are following, backed by real results.',
     ],
-    bettorSteps: [
-      { title: 'Browse the marketplace', desc: 'See all available betslips from every tipster. Filter by odds range — from safe low-risk slips to high-odds accumulators. Every slip shows the total odds, number of legs, and the tipster\'s win record.' },
-      { title: 'Check the tipster', desc: 'Tap any tipster chip to visit their channel. See their full 4-week performance record, win rate, average odds, streak, and their last 5 results. Make an informed decision before you pay anything.' },
-      { title: 'Buy only what you want', desc: 'Pay per slip — no monthly subscriptions, no commitments. If you like a slip, pay for it once using MTN Mobile Money or AirtelTigo Money. The booking code unlocks immediately after payment.' },
-      { title: 'Load the slip and bet', desc: 'Use the booking code to load the full betslip on your betting platform — SportyBet, Betway, 1xBet, betPawa, or any other. Place your bet and follow the results.' },
-      { title: 'Finished slips are free', desc: 'Once a slip\'s matches have all played out, the result is public and free for everyone to view. You can see exactly what a tipster picked and whether it won — before buying their next slip.' },
-    ],
-    tipsterIntro: 'If you consistently pick winners, Betfluencer lets you earn from every bettor who buys your slip. Here is how it works:',
-    tipsterSteps: [
-      { title: 'Create your channel', desc: 'Sign up with your phone number and set up your public tipster channel. Your channel shows your win rate, average odds, and full performance history.' },
-      { title: 'Post betslips', desc: 'Enter your booking code and betting platform when you post a slip. Set your own price per slip — from GH₵5 to whatever you think it is worth. You can post multiple slips at different odds levels simultaneously.' },
-      { title: 'Earn per purchase', desc: 'Every time a bettor buys your slip, 90% of the payment is yours. Betfluencer keeps 10% as a platform fee. No monthly fees, no minimum payouts, no waiting.' },
-      { title: 'Build your reputation', desc: 'Your win rate and rankings are calculated automatically from your results over the last 28 days. Consistent winners earn a verified tick and appear higher in the rankings — bringing more buyers to their channel.' },
-    ],
-    paymentsHeading: 'Simple Mobile Money payments',
-    paymentsIntro: 'Betfluencer Ghana runs entirely in Ghana Cedis. Pay with MTN Mobile Money or AirtelTigo Money — no bank account, no credit card, no international payment hassle.',
-    paymentsRows: [
-      { label: 'Supported networks', val: 'MTN Mobile Money · AirtelTigo Money' },
-      { label: 'Currency', val: 'Ghana Cedi (GH₵)' },
-      { label: 'Tipster payout', val: '90% of each slip purchase' },
-      { label: 'Platform fee', val: '10% per transaction' },
-      { label: 'Subscriptions', val: 'None — pay per slip only' },
-      { label: 'Minimum purchase', val: 'Set by each tipster individually' },
-    ],
-    coverageIntro: 'Betfluencer supports tipsters covering any football league or competition that can be bet on — from the Ghana Premier League to the biggest European competitions.',
+    bettorSteps: bettorSteps('SportyBet, Betway, 1xBet, betPawa'),
+    tipsterIntro: TIPSTER_INTRO,
+    tipsterSteps: tipsterSteps(),
+    paymentsHeading: PAYMENTS_HEADING,
+    paymentsIntro: PAYMENTS_INTRO,
+    paymentsRows: ACCESS_ROWS,
+    coverageIntro: 'Betfluencer tipsters cover any football league or competition — from the Ghana Premier League to the biggest European competitions.',
     coverageRegions: [
       { region: '🇬🇭 Ghana', leagues: ['Ghana Premier League', 'MTN FA Cup'] },
       { region: '🌍 Africa', leagues: ['AFCON', 'CAF Champions League', 'NPFL Nigeria', 'Uganda Premier League', 'ABSA Premiership South Africa'] },
-      { region: '🏴󠁧󠁢󠁥󠁮󠁧󠁿 England', leagues: ['Premier League', 'Championship', 'FA Cup', 'EFL Trophy'] },
-      { region: '🌍 Europe', leagues: ['UEFA Champions League', 'UEFA Europa League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1'] },
-      { region: '🌎 Americas & Asia', leagues: ['MLS', 'Copa Libertadores', 'J-League', 'Saudi Pro League'] },
+      ...EU_REGIONS,
     ],
     companyHeading: 'Built in Africa, for Ghana',
     companyParas: [
       'Betfluencer was built by ABC Input Solutions, an African technology company focused on building digital products that solve real problems for markets across the continent.',
-      'Ghana has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp groups and social media — but no structured way to build a reputation, reach a wider audience, or earn fairly from their knowledge. At the same time, bettors have no reliable way to find and evaluate tipsters beyond word of mouth.',
-      'Betfluencer solves both problems. It gives tipsters a professional platform and a fair income stream, and gives bettors transparent, verifiable performance data to make smarter decisions.',
+      'Ghana has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp groups and social media — but no structured, public place to build a reputation or reach a wider audience. At the same time, bettors have no reliable way to find and evaluate tipsters beyond word of mouth.',
+      'Betfluencer gives them that place — free. It gives tipsters a professional platform and a public track record, and gives everyone else transparent, verifiable performance data to decide who to follow.',
     ],
-    faq: [
-      { q: 'Is Betfluencer free to use?', a: 'Browsing tipster channels and viewing finished slip results is completely free. You only pay when you choose to buy a specific pending slip.' },
-      { q: 'How do I know a tipster is genuine?', a: 'Every tipster\'s win rate, average odds, and 4-week performance record is publicly visible. Booking codes can be verified on the relevant betting platform. Tipsters with a verified tick have earned it through consistent performance — it cannot be purchased.' },
-      { q: 'What happens if I pay and the slip loses?', a: 'Slip purchases are for access to the tipster\'s pick — not a guarantee of winning. Like all betting, results are not guaranteed. This is why we encourage you to review a tipster\'s full track record before buying.' },
-      { q: 'Can I become a tipster?', a: 'Yes. Sign up through the Tipster tab, create your channel, and start posting slips. There are no upfront fees. You earn 90% of every slip purchase.' },
-      { q: 'Which betting platforms are supported?', a: 'Betfluencer works with any betting platform that supports booking codes — including SportyBet, Betway, 1xBet, betPawa, and others.' },
-      { q: 'Is Betfluencer available outside Ghana?', a: 'Yes — Betfluencer runs dedicated markets across Africa, each with local pricing and payment methods. Visit betfluencer.org to choose your country.' },
-    ],
+    faq: sharedFaq('Ghana', 'SportyBet, Betway, 1xBet, betPawa'),
   },
 
   ZA: {
     meta: {
-      title: 'About Betfluencer — South Africa\'s Football Tipster Marketplace',
-      description: 'Betfluencer is South Africa\'s marketplace connecting football betting tipsters with bettors. Discover verified tipsters, buy betslips, and bet smarter with real win-rate data.',
-      keywords: 'betfluencer, football tips south africa, betting tipsters south africa, sports betting south africa, betway tips, psl betting tips',
+      title: 'About Betfluencer — Free Football Tips in South Africa',
+      description: 'Betfluencer is South Africa\'s free community for sharing and discovering football betslips. Follow verified tipsters, open booking codes and screenshots, and track real win rates — no payments, ever.',
+      keywords: 'betfluencer, free football tips south africa, betting tipsters south africa, betway booking codes, psl tips, football predictions south africa',
       ogTitle: 'About Betfluencer',
-      ogDescription: 'South Africa\'s football tipster marketplace. Buy betslips from verified tipsters and bet smarter.',
+      ogDescription: 'South Africa\'s free football betslip community. Follow verified tipsters and track real win rates — free.',
       ogUrl: 'https://za.betfluencer.org/about',
     },
-    heroTitle: ['South Africa\'s football', 'tipster marketplace'],
-    heroIntro: 'Betfluencer connects football bettors with South Africa\'s best tipsters. Browse betslips, check win rates, pay per slip, and bet smarter — all in one place.',
-    heroChips: ['Betway', 'SportyBet', 'DStv Premiership', 'Premier League', 'Champions League'],
-    whatHeading: 'The smartest way to bet in South Africa',
+    heroTitle: ['South Africa\'s football tips —', 'free & open'],
+    heroIntro: 'Betfluencer is where South Africa\'s football tipsters share their betslips — booking codes and screenshots — with everyone, free. Follow the sharpest tipsters, check real win rates, and load their picks on your own bookie.',
+    heroChips: ['Free to use', 'DStv Premiership', 'Premier League', 'Champions League', 'Betway'],
+    whatHeading: 'Football tips, shared openly in South Africa',
     whatParas: [
-      'Betfluencer is a two-sided marketplace built specifically for the South African betting market. On one side, skilled football tipsters post their betslips — complete with booking codes, odds, and their verified win record. On the other side, bettors browse those slips, pay only for the ones they want, and place their bets with more confidence.',
-      'We do not place bets for you. We do not hold your money. We simply connect you with tipsters who have a proven track record, and let you decide who to follow and which slips to buy.',
-      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly who you are buying from before you spend a single rand.',
+      'Betfluencer is a free, public platform built for the South African football community. Tipsters post their betslips — complete with booking codes or screenshots, odds, and their verified win record — and anyone can view them. No paywall, no fees.',
+      'We do not place bets for you and we do not handle any money. We simply give tipsters a place to share their picks and build a public track record, and give everyone else a transparent way to find tipsters worth following.',
+      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly whose tips you are following, backed by real results.',
     ],
-    bettorSteps: [
-      { title: 'Browse the marketplace', desc: 'See all available betslips from every tipster. Filter by odds range — from safe low-risk slips to high-odds accumulators. Every slip shows the total odds, number of legs, and the tipster\'s win record.' },
-      { title: 'Check the tipster', desc: 'Tap any tipster chip to visit their channel. See their full 4-week performance record, win rate, average odds, streak, and their last 5 results. Make an informed decision before you pay anything.' },
-      { title: 'Buy only what you want', desc: 'Pay per slip — no monthly subscriptions, no commitments. If you like a slip, pay for it once in Rand. The booking code unlocks immediately after payment.' },
-      { title: 'Load the slip and bet', desc: 'Use the booking code to load the full betslip on your betting platform — Betway, SportyBet, 1xBet, or any other. Place your bet and follow the results.' },
-      { title: 'Finished slips are free', desc: 'Once a slip\'s matches have all played out, the result is public and free for everyone to view. You can see exactly what a tipster picked and whether it won — before buying their next slip.' },
-    ],
-    tipsterIntro: 'If you consistently pick winners, Betfluencer lets you earn from every bettor who buys your slip. Here is how it works:',
-    tipsterSteps: [
-      { title: 'Create your channel', desc: 'Sign up with your phone number and set up your public tipster channel. Your channel shows your win rate, average odds, and full performance history.' },
-      { title: 'Post betslips', desc: 'Enter your booking code and betting platform when you post a slip. Set your own price per slip — from R10 to whatever you think it is worth. You can post multiple slips at different odds levels simultaneously.' },
-      { title: 'Earn per purchase', desc: 'Every time a bettor buys your slip, 90% of the payment is yours. Betfluencer keeps 10% as a platform fee. No monthly fees, no minimum payouts, no waiting.' },
-      { title: 'Build your reputation', desc: 'Your win rate and rankings are calculated automatically from your results over the last 28 days. Consistent winners earn a verified tick and appear higher in the rankings — bringing more buyers to their channel.' },
-    ],
-    paymentsHeading: 'Simple, local payments in Rand',
-    paymentsIntro: 'Betfluencer South Africa runs entirely in Rand. Pay with your card, instant EFT, or prepaid voucher — no international payment hassle.',
-    paymentsRows: [
-      { label: 'Supported methods', val: 'Cards · Instant EFT · Vouchers' },
-      { label: 'Currency', val: 'South African Rand (R)' },
-      { label: 'Tipster payout', val: '90% of each slip purchase' },
-      { label: 'Platform fee', val: '10% per transaction' },
-      { label: 'Subscriptions', val: 'None — pay per slip only' },
-      { label: 'Minimum purchase', val: 'Set by each tipster individually' },
-    ],
-    coverageIntro: 'Betfluencer supports tipsters covering any football league or competition that can be bet on — from the DStv Premiership to the biggest European competitions.',
+    bettorSteps: bettorSteps('Betway, SportyBet, 1xBet'),
+    tipsterIntro: TIPSTER_INTRO,
+    tipsterSteps: tipsterSteps(),
+    paymentsHeading: PAYMENTS_HEADING,
+    paymentsIntro: PAYMENTS_INTRO,
+    paymentsRows: ACCESS_ROWS,
+    coverageIntro: 'Betfluencer tipsters cover any football league or competition — from the DStv Premiership to the biggest European competitions.',
     coverageRegions: [
       { region: '🇿🇦 South Africa', leagues: ['DStv Premiership', 'Nedbank Cup', 'MTN 8'] },
       { region: '🌍 Africa', leagues: ['AFCON', 'CAF Champions League', 'NPFL Nigeria', 'Kenya Premier League', 'Uganda Premier League'] },
-      { region: '🏴󠁧󠁢󠁥󠁮󠁧󠁿 England', leagues: ['Premier League', 'Championship', 'FA Cup', 'EFL Trophy'] },
-      { region: '🌍 Europe', leagues: ['UEFA Champions League', 'UEFA Europa League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1'] },
-      { region: '🌎 Americas & Asia', leagues: ['MLS', 'Copa Libertadores', 'J-League', 'Saudi Pro League'] },
+      ...EU_REGIONS,
     ],
     companyHeading: 'Built in Africa, for South Africa',
     companyParas: [
       'Betfluencer was built by ABC Input Solutions, an African technology company focused on building digital products that solve real problems for markets across the continent.',
-      'South Africa has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp groups and social media — but no structured way to build a reputation, reach a wider audience, or earn fairly from their knowledge. At the same time, bettors have no reliable way to find and evaluate tipsters beyond word of mouth.',
-      'Betfluencer solves both problems. It gives tipsters a professional platform and a fair income stream, and gives bettors transparent, verifiable performance data to make smarter decisions.',
+      'South Africa has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp groups and social media — but no structured, public place to build a reputation or reach a wider audience. At the same time, bettors have no reliable way to find and evaluate tipsters beyond word of mouth.',
+      'Betfluencer gives them that place — free. It gives tipsters a professional platform and a public track record, and gives everyone else transparent, verifiable performance data to decide who to follow.',
     ],
-    faq: [
-      { q: 'Is Betfluencer free to use?', a: 'Browsing tipster channels and viewing finished slip results is completely free. You only pay when you choose to buy a specific pending slip.' },
-      { q: 'How do I know a tipster is genuine?', a: 'Every tipster\'s win rate, average odds, and 4-week performance record is publicly visible. Booking codes can be verified on the relevant betting platform. Tipsters with a verified tick have earned it through consistent performance — it cannot be purchased.' },
-      { q: 'What happens if I pay and the slip loses?', a: 'Slip purchases are for access to the tipster\'s pick — not a guarantee of winning. Like all betting, results are not guaranteed. This is why we encourage you to review a tipster\'s full track record before buying.' },
-      { q: 'Can I become a tipster?', a: 'Yes. Sign up through the Tipster tab, create your channel, and start posting slips. There are no upfront fees. You earn 90% of every slip purchase.' },
-      { q: 'Which betting platforms are supported?', a: 'Betfluencer works with any betting platform that supports booking codes — including Betway, SportyBet, 1xBet, and others.' },
-      { q: 'Is Betfluencer available outside South Africa?', a: 'Yes — Betfluencer runs dedicated markets across Africa, each with local pricing and payment methods. Visit betfluencer.org to choose your country.' },
-    ],
+    faq: sharedFaq('South Africa', 'Betway, SportyBet, 1xBet'),
   },
 
   KE: {
     meta: {
-      title: 'About Betfluencer — Kenya\'s Football Tipster Marketplace',
-      description: 'Betfluencer is Kenya\'s marketplace connecting football betting tipsters with bettors. Discover verified tipsters, buy betslips, and bet smarter with real win-rate data.',
-      keywords: 'betfluencer, football tips kenya, betting tipsters kenya, sports betting kenya, sportpesa tips, mpesa betting',
+      title: 'About Betfluencer — Free Football Tips in Kenya',
+      description: 'Betfluencer is Kenya\'s free community for sharing and discovering football betslips. Follow verified tipsters, open booking codes and screenshots, and track real win rates — no payments, ever.',
+      keywords: 'betfluencer, free football tips kenya, betting tipsters kenya, sportpesa booking codes, betika tips, football predictions kenya',
       ogTitle: 'About Betfluencer',
-      ogDescription: 'Kenya\'s football tipster marketplace. Buy betslips from verified tipsters and bet smarter.',
+      ogDescription: 'Kenya\'s free football betslip community. Follow verified tipsters and track real win rates — free.',
       ogUrl: 'https://ke.betfluencer.org/about',
     },
-    heroTitle: ['Kenya\'s football', 'tipster marketplace'],
-    heroIntro: 'Betfluencer connects football bettors with Kenya\'s best tipsters. Browse betslips, check win rates, pay per slip, and bet smarter — all in one place.',
-    heroChips: ['M-Pesa', 'Betika', 'SportPesa', 'FKF Premier League', 'Premier League'],
-    whatHeading: 'The smartest way to bet in Kenya',
+    heroTitle: ['Kenya\'s football tips —', 'free & open'],
+    heroIntro: 'Betfluencer is where Kenya\'s football tipsters share their betslips — booking codes and screenshots — with everyone, free. Follow the sharpest tipsters, check real win rates, and load their picks on your own bookie.',
+    heroChips: ['Free to use', 'FKF Premier League', 'Premier League', 'Champions League', 'Betika'],
+    whatHeading: 'Football tips, shared openly in Kenya',
     whatParas: [
-      'Betfluencer is a two-sided marketplace built specifically for the Kenyan betting market. On one side, skilled football tipsters post their betslips — complete with booking codes, odds, and their verified win record. On the other side, bettors browse those slips, pay only for the ones they want, and place their bets with more confidence.',
-      'We do not place bets for you. We do not hold your money. We simply connect you with tipsters who have a proven track record, and let you decide who to follow and which slips to buy.',
-      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly who you are buying from before you spend a single shilling.',
+      'Betfluencer is a free, public platform built for the Kenyan football community. Tipsters post their betslips — complete with booking codes or screenshots, odds, and their verified win record — and anyone can view them. No paywall, no fees.',
+      'We do not place bets for you and we do not handle any money. We simply give tipsters a place to share their picks and build a public track record, and give everyone else a transparent way to find tipsters worth following.',
+      'Every tipster on Betfluencer has a public win rate, average odds, and a rolling four-week performance record — so you always know exactly whose tips you are following, backed by real results.',
     ],
-    bettorSteps: [
-      { title: 'Browse the marketplace', desc: 'See all available betslips from every tipster. Filter by odds range — from safe low-risk slips to high-odds accumulators. Every slip shows the total odds, number of legs, and the tipster\'s win record.' },
-      { title: 'Check the tipster', desc: 'Tap any tipster chip to visit their channel. See their full 4-week performance record, win rate, average odds, streak, and their last 5 results. Make an informed decision before you pay anything.' },
-      { title: 'Buy only what you want', desc: 'Pay per slip — no monthly subscriptions, no commitments. If you like a slip, pay for it once using M-Pesa or Airtel Money. The booking code unlocks immediately after payment.' },
-      { title: 'Load the slip and bet', desc: 'Use the booking code to load the full betslip on your betting platform — Betika, SportPesa, betPawa, or any other. Place your bet and follow the results.' },
-      { title: 'Finished slips are free', desc: 'Once a slip\'s matches have all played out, the result is public and free for everyone to view. You can see exactly what a tipster picked and whether it won — before buying their next slip.' },
-    ],
-    tipsterIntro: 'If you consistently pick winners, Betfluencer lets you earn from every bettor who buys your slip. Here is how it works:',
-    tipsterSteps: [
-      { title: 'Create your channel', desc: 'Sign up with your phone number and set up your public tipster channel. Your channel shows your win rate, average odds, and full performance history.' },
-      { title: 'Post betslips', desc: 'Enter your booking code and betting platform when you post a slip. Set your own price per slip — from KSh 20 to whatever you think it is worth. You can post multiple slips at different odds levels simultaneously.' },
-      { title: 'Earn per purchase', desc: 'Every time a bettor buys your slip, 90% of the payment is yours. Betfluencer keeps 10% as a platform fee. No monthly fees, no minimum payouts, no waiting.' },
-      { title: 'Build your reputation', desc: 'Your win rate and rankings are calculated automatically from your results over the last 28 days. Consistent winners earn a verified tick and appear higher in the rankings — bringing more buyers to their channel.' },
-    ],
-    paymentsHeading: 'Simple mobile money payments',
-    paymentsIntro: 'Betfluencer Kenya runs entirely in Kenya Shillings. Pay with M-Pesa or Airtel Money — no bank account, no credit card, no international payment hassle.',
-    paymentsRows: [
-      { label: 'Supported networks', val: 'M-Pesa · Airtel Money' },
-      { label: 'Currency', val: 'Kenya Shillings (KSh)' },
-      { label: 'Tipster payout', val: '90% of each slip purchase' },
-      { label: 'Platform fee', val: '10% per transaction' },
-      { label: 'Subscriptions', val: 'None — pay per slip only' },
-      { label: 'Minimum purchase', val: 'Set by each tipster individually' },
-    ],
-    coverageIntro: 'Betfluencer supports tipsters covering any football league or competition that can be bet on — from the FKF Premier League to the biggest European competitions.',
+    bettorSteps: bettorSteps('Betika, SportPesa, betPawa'),
+    tipsterIntro: TIPSTER_INTRO,
+    tipsterSteps: tipsterSteps(),
+    paymentsHeading: PAYMENTS_HEADING,
+    paymentsIntro: PAYMENTS_INTRO,
+    paymentsRows: ACCESS_ROWS,
+    coverageIntro: 'Betfluencer tipsters cover any football league or competition — from the FKF Premier League to the biggest European competitions.',
     coverageRegions: [
       { region: '🇰🇪 Kenya', leagues: ['FKF Premier League', 'National Super League'] },
       { region: '🌍 Africa', leagues: ['AFCON', 'CAF Champions League', 'Uganda Premier League', 'NPFL Nigeria', 'ABSA Premiership South Africa'] },
-      { region: '🏴󠁧󠁢󠁥󠁮󠁧󠁿 England', leagues: ['Premier League', 'Championship', 'FA Cup', 'EFL Trophy'] },
-      { region: '🌍 Europe', leagues: ['UEFA Champions League', 'UEFA Europa League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1'] },
-      { region: '🌎 Americas & Asia', leagues: ['MLS', 'Copa Libertadores', 'J-League', 'Saudi Pro League'] },
+      ...EU_REGIONS,
     ],
     companyHeading: 'Built in Africa, for Kenya',
     companyParas: [
       'Betfluencer was built by ABC Input Solutions, an African technology company focused on building digital products that solve real problems for East African markets.',
-      'Kenya has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp groups and social media — but no structured way to build a reputation, reach a wider audience, or earn fairly from their knowledge. At the same time, bettors have no reliable way to find and evaluate tipsters beyond word of mouth.',
-      'Betfluencer solves both problems. It gives tipsters a professional platform and a fair income stream, and gives bettors transparent, verifiable performance data to make smarter decisions.',
+      'Kenya has thousands of skilled football analysts and tipsters sharing picks informally on WhatsApp groups and social media — but no structured, public place to build a reputation or reach a wider audience. At the same time, bettors have no reliable way to find and evaluate tipsters beyond word of mouth.',
+      'Betfluencer gives them that place — free. It gives tipsters a professional platform and a public track record, and gives everyone else transparent, verifiable performance data to decide who to follow.',
     ],
-    faq: [
-      { q: 'Is Betfluencer free to use?', a: 'Browsing tipster channels and viewing finished slip results is completely free. You only pay when you choose to buy a specific pending slip.' },
-      { q: 'How do I know a tipster is genuine?', a: 'Every tipster\'s win rate, average odds, and 4-week performance record is publicly visible. Booking codes can be verified on the relevant betting platform. Tipsters with a verified tick have earned it through consistent performance — it cannot be purchased.' },
-      { q: 'What happens if I pay and the slip loses?', a: 'Slip purchases are for access to the tipster\'s pick — not a guarantee of winning. Like all betting, results are not guaranteed. This is why we encourage you to review a tipster\'s full track record before buying.' },
-      { q: 'Can I become a tipster?', a: 'Yes. Sign up through the Tipster tab, create your channel, and start posting slips. There are no upfront fees. You earn 90% of every slip purchase.' },
-      { q: 'Which betting platforms are supported?', a: 'Betfluencer works with any betting platform that supports booking codes — including Betika, SportPesa, betPawa, 1xBet, and others.' },
-      { q: 'Is Betfluencer available outside Kenya?', a: 'Yes — Betfluencer runs dedicated markets across Africa, each with local pricing and payment methods. Visit betfluencer.org to choose your country.' },
-    ],
+    faq: sharedFaq('Kenya', 'Betika, SportPesa, betPawa, 1xBet'),
   },
 }

@@ -11,7 +11,7 @@ test.describe('manual slip', () => {
     // Use an odds value with no trailing zero — the API stores it as a numeric
     // (parseFloat), so '6.50' would render as '×6.5' and miss a literal match.
     const odds = '6.55'
-    await postManualSlip(page, { price: 1500, odds, legCount: '3' })
+    await postManualSlip(page, { odds, legCount: '3' })
 
     // Dashboard "My slips": the new slip is listed with its odds.
     await expect(page.getByText(`×${odds}`).first()).toBeVisible({ timeout: 30_000 })

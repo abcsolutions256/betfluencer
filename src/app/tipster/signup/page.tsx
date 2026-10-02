@@ -3,9 +3,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Lock } from 'lucide-react'
+import { useCountry } from '@/components/CountryProvider'
+import { dialCode } from '@/lib/country'
 
 export default function TipsterSignupPage() {
   const router = useRouter()
+  const { country } = useCountry()
+  const dial = dialCode(country.code)
   const [f, setF] = useState({ name: '', password: '', username: '', phone: '', sport: '', description: '' })
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF(s => ({ ...s, [k]: e.target.value }))
   const [err, setErr]         = useState('')
@@ -60,13 +64,13 @@ export default function TipsterSignupPage() {
     <div style={shell}>
       <form onSubmit={submit} style={card}>
         <div style={title}>Become a tipster</div>
-        <div style={sub}>Post slips, get paid per sale</div>
+        <div style={sub}>Register to share your betslips — free</div>
         {err && <div style={errorBox}>{err}</div>}
         <input style={input} placeholder="Display name" value={f.name} onChange={set('name')} autoFocus />
         <input style={input} placeholder="Username (public, e.g. enzo)" value={f.username} onChange={set('username')} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={prefix}>+256</div>
-          <input style={{ ...input, flex: 1 }} type="tel" placeholder="Mobile Money number (your login + payout)" value={f.phone} onChange={set('phone')} />
+          <div style={prefix}>+{dial}</div>
+          <input style={{ ...input, flex: 1 }} type="tel" placeholder="Phone number (your login)" value={f.phone} onChange={set('phone')} />
         </div>
         <input style={input} type="password" placeholder="Password (min 8, incl. a number)" value={f.password} onChange={set('password')} />
         <input style={input} placeholder="Sport / leagues you cover" value={f.sport} onChange={set('sport')} />
