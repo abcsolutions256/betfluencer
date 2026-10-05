@@ -8,9 +8,9 @@ import { loadCountries } from '@/lib/country'
 import CountryPicker from './CountryPicker'
 
 export const metadata: Metadata = {
-  title: 'Betfluencer — Free Football Tips Across Africa',
+  title: 'Betfluencer — Free Football Tips Across Africa & Brazil',
   description:
-    'Follow verified football tipsters across Africa. Browse betslips, check real win records, and see every pick free — no payments, no account needed. Choose your country to get started.',
+    'Follow verified football tipsters across Africa and Brazil. Browse betslips, check real win records, and see every pick free — no payments, no account needed. Choose your country to get started.',
 }
 
 export const dynamic = 'force-dynamic'
