@@ -16,27 +16,47 @@ export const BETTING_SITES = [
   'Betway',
 ] as const
 
-export type BettingSite = (typeof BETTING_SITES)[number]
+// Display-only bookies for markets the bet-code worker has NO adapter for yet
+// (e.g. Brazil). These are NOT verifiable by the worker — safe during the free
+// open beta, where coded slips are not scraped (payments_enabled=false). Before
+// turning payments on for a market that uses these, add matching worker adapters
+// in bet-code-worker/src/adapters.js and move the site into BETTING_SITES.
+export const DISPLAY_ONLY_SITES = [
+  'Betano',
+  'Superbet',
+  'Sportingbet',
+  'Stake',
+  'KTO',
+  'Betfair',
+  'EstrelaBet',
+  'Bet365',
+] as const
+
+// Every bookie name the app may display across all markets.
+const KNOWN_SITES = [...BETTING_SITES, ...DISPLAY_ONLY_SITES] as const
+
+export type BettingSite = (typeof BETTING_SITES)[number] | (typeof DISPLAY_ONLY_SITES)[number]
 
 /**
- * Order the canonical site list for a market: the country's preference
- * order (countries.betting_sites) first, then every remaining site in
- * canonical order. Sites are REORDERED, never removed — all bookies the
- * worker supports stay selectable in every market — and unknown names in
- * the preference list are ignored, so a countries-table typo can't make
- * an unsupported site appear. With no/empty preference (or UG, whose
- * preference equals the canonical order) this returns BETTING_SITES
- * unchanged — today's exact behaviour.
+ * The ordered site list for a market: the country's own preference list
+ * (countries.betting_sites), filtered to KNOWN_SITES and de-duplicated, in the
+ * country's order. Unknown names are ignored (a countries-table typo can't
+ * surface an unsupported bookie). With no/empty preference it falls back to the
+ * canonical worker-supported list (today's UG default).
+ *
+ * NOTE: this returns ONLY the market's declared sites — it no longer appends
+ * every other bookie. Existing markets are unaffected (each lists the full
+ * pan-African set); new markets (Brazil) show their own bookies instead of
+ * inheriting the African ones.
  */
 export function orderSitesForCountry(preference: string[] | null | undefined): BettingSite[] {
-  const canonical = [...BETTING_SITES]
-  if (!preference?.length) return canonical
+  if (!preference?.length) return [...BETTING_SITES]
   const norm = (s: string) => s.replace(/\s+/g, '').toLowerCase()
-  const byNorm = new Map(canonical.map(s => [norm(s), s]))
-  const first: BettingSite[] = []
+  const byNorm = new Map<string, BettingSite>(KNOWN_SITES.map(s => [norm(s), s]))
+  const picked: BettingSite[] = []
   for (const p of preference) {
     const hit = byNorm.get(norm(p))
-    if (hit && !first.includes(hit)) first.push(hit)
+    if (hit && !picked.includes(hit)) picked.push(hit)
   }
-  return [...first, ...canonical.filter(s => !first.includes(s))]
+  return picked.length ? picked : [...BETTING_SITES]
 }
