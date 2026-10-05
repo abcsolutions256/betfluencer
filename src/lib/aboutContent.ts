@@ -193,69 +193,6 @@ export const ABOUT_CONTENT: Record<string, AboutContent> = {
     faq: sharedFaq('Uganda', 'BetPawa, Betway, SportPesa, Mozzart, 1xBet'),
   },
 
-  BR: {
-    meta: {
-      title: 'Sobre o Betfluencer — Dicas de Futebol Grátis no Brasil',
-      description: 'O Betfluencer é a comunidade gratuita do Brasil para compartilhar e descobrir bilhetes de apostas de futebol. Siga tipsters verificados, abra códigos de reserva e prints, e acompanhe taxas de acerto reais — sem pagamentos, nunca.',
-      keywords: 'betfluencer, dicas de futebol grátis brasil, tipsters de apostas brasil, códigos de reserva, palpites de futebol, brasileirão dicas',
-      ogTitle: 'Sobre o Betfluencer',
-      ogDescription: 'A comunidade gratuita de bilhetes de futebol do Brasil. Siga tipsters verificados e acompanhe taxas de acerto reais — grátis.',
-      ogUrl: 'https://br.betfluencer.org/about',
-    },
-    heroTitle: ['Dicas de futebol do Brasil —', 'grátis e abertas'],
-    heroIntro: 'O Betfluencer é onde os tipsters de futebol do Brasil compartilham seus bilhetes — códigos de reserva e prints — com todo mundo, de graça. Siga os tipsters mais afiados, confira taxas de acerto reais e carregue os palpites na sua própria casa de apostas.',
-    heroChips: ['Grátis para usar', 'Brasileirão', 'Libertadores', 'Champions League', 'Betano'],
-    whatHeading: 'Dicas de futebol, compartilhadas abertamente no Brasil',
-    whatParas: [
-      'O Betfluencer é uma plataforma gratuita e pública feita para a comunidade brasileira de futebol. Os tipsters publicam seus bilhetes — com códigos de reserva ou prints, odds e seu histórico verificado de acertos — e qualquer pessoa pode ver. Sem paywall, sem taxas.',
-      'Nós não apostamos por você e não movimentamos nenhum dinheiro. Apenas damos aos tipsters um lugar para compartilhar seus palpites e construir um histórico público, e damos a todos os outros uma forma transparente de encontrar tipsters que valem a pena seguir.',
-      'Cada tipster no Betfluencer tem uma taxa de acerto pública, odds médias e um histórico de desempenho das últimas quatro semanas — então você sempre sabe exatamente de quem está seguindo os palpites, com base em resultados reais.',
-    ],
-    bettorSteps: [
-      { title: 'Explore o feed', desc: 'Veja todos os bilhetes publicados por todos os tipsters, de graça. Filtre por faixa de odds — de bilhetes seguros de baixo risco a múltiplas de odds altas. Cada bilhete mostra as odds totais, o número de seleções e o histórico de acertos do tipster.' },
-      { title: 'Confira o tipster', desc: 'Toque no nome de qualquer tipster para visitar o canal dele. Veja o histórico completo de quatro semanas, taxa de acerto, odds médias, sequência atual e os últimos 5 resultados — para saber exatamente de quem você está seguindo os palpites.' },
-      { title: 'Abra qualquer palpite, de graça', desc: 'Todo bilhete é gratuito para abrir — sem pagamento, sem taxa de desbloqueio. Toque em um bilhete para revelar na hora o código de reserva completo ou o print.' },
-      { title: 'Carregue o bilhete e aposte', desc: 'Use o código de reserva para carregar o bilhete completo na sua casa de apostas — Betano, Superbet, Bet365, ou qualquer outra. Faça sua aposta e acompanhe os resultados.' },
-      { title: 'Bilhetes encerrados mostram o resultado', desc: 'Quando todos os jogos de um bilhete terminam, o resultado fica público para todos. Dá para ver exatamente o que o tipster escolheu e se ganhou — construindo um histórico honesto e verificável.' },
-    ],
-    tipsterIntro: 'Tem bom olho para futebol? Compartilhe seus bilhetes com toda a comunidade e construa um histórico público. Veja como funciona:',
-    tipsterSteps: [
-      { title: 'Crie seu canal', desc: 'Cadastre-se com seu número de telefone e monte seu canal público de tipster. Seu canal mostra sua taxa de acerto, odds médias e todo o histórico de desempenho.' },
-      { title: 'Publique seus bilhetes', desc: 'Compartilhe um código de reserva ou envie um print, informe a casa de apostas e publique. Poste quantos bilhetes quiser, em qualquer odd — tudo o que você publica é grátis para a comunidade ver.' },
-      { title: 'Construa seu público', desc: 'Não há taxas e nada para vender — você compartilha palpites para crescer sua audiência. Cada resultado é registrado automaticamente, então uma boa sequência coloca você na frente de mais seguidores.' },
-      { title: 'Conquiste sua reputação', desc: 'Sua taxa de acerto e o ranking são calculados automaticamente a partir dos seus resultados nos últimos 28 dias. Quem ganha com consistência conquista o selo de verificado e sobe no ranking — atraindo mais seguidores para o canal.' },
-    ],
-    paymentsHeading: 'Grátis e aberto, para todos',
-    paymentsIntro: 'O Betfluencer é totalmente gratuito. Sem taxas de desbloqueio, sem assinaturas, sem pagamentos — é uma comunidade para compartilhar dicas de futebol, não uma loja. Qualquer pessoa pode se cadastrar e publicar, e todos podem ver.',
-    paymentsRows: [
-      { label: 'Custo', val: 'Grátis' },
-      { label: 'Assinaturas', val: 'Nenhuma' },
-      { label: 'Taxas de desbloqueio', val: 'Nenhuma' },
-      { label: 'Quem pode publicar', val: 'Qualquer tipster cadastrado' },
-      { label: 'Quem pode ver', val: 'Todos' },
-    ],
-    coverageIntro: 'Os tipsters do Betfluencer cobrem qualquer liga ou competição de futebol — do futebol brasileiro às maiores competições europeias.',
-    coverageRegions: [
-      { region: '🇧🇷 Brasil', leagues: ['Brasileirão Série A', 'Brasileirão Série B', 'Copa do Brasil', 'Paulistão', 'Campeonato Carioca'] },
-      { region: '🌎 América do Sul', leagues: ['Copa Libertadores', 'Copa Sul-Americana', 'Recopa Sul-Americana'] },
-      { region: '🌍 Europa', leagues: ['Champions League', 'Europa League', 'Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1'] },
-    ],
-    companyHeading: 'Feito para o Brasil',
-    companyParas: [
-      'O Betfluencer foi criado pela ABC Input Solutions, uma empresa de tecnologia focada em construir produtos digitais que resolvem problemas reais em mercados emergentes.',
-      'O Brasil tem milhares de analistas e tipsters de futebol talentosos compartilhando palpites de forma informal em grupos de WhatsApp, Telegram e redes sociais — mas nenhum lugar estruturado e público para construir uma reputação ou alcançar um público maior. Ao mesmo tempo, os apostadores não tinham uma forma confiável de encontrar e avaliar tipsters além do boca a boca.',
-      'O Betfluencer oferece esse lugar — de graça. Dá aos tipsters uma plataforma profissional e um histórico público, e dá a todos os outros dados de desempenho transparentes e verificáveis para decidir quem seguir.',
-    ],
-    faq: [
-      { q: 'O Betfluencer é gratuito?', a: 'Sim — totalmente. Ver tipsters, abrir bilhetes (códigos de reserva e prints) e conferir resultados são todos gratuitos. Não há taxas de desbloqueio nem assinaturas.' },
-      { q: 'Como sei se um tipster é confiável?', a: 'A taxa de acerto, as odds médias e o histórico de quatro semanas de cada tipster são públicos. Os códigos de reserva podem ser conferidos na casa de apostas correspondente. Tipsters com selo de verificado conquistaram isso com desempenho consistente — não dá para comprar.' },
-      { q: 'Os palpites têm garantia de acerto?', a: 'Não. Um palpite é a opinião de uma pessoa e, como toda aposta, os resultados nunca são garantidos. É exatamente por isso que todo o histórico de cada tipster é público — siga os que têm um histórico comprovado e aposte sempre com responsabilidade.' },
-      { q: 'Posso me tornar um tipster?', a: 'Sim. Cadastre-se pela aba Tipster, crie seu canal e comece a publicar bilhetes. É grátis — não há taxas e nada para vender. Você compartilha palpites para construir sua reputação e seu público.' },
-      { q: 'Quais casas de apostas são suportadas?', a: 'O Betfluencer funciona com qualquer casa de apostas que aceite códigos de reserva — incluindo Betano, Superbet, Bet365, Sportingbet, KTO, e outras.' },
-      { q: 'O Betfluencer está disponível fora do Brasil?', a: 'Sim — o Betfluencer tem comunidades gratuitas e dedicadas em vários países. Acesse betfluencer.org para escolher o seu.' },
-    ],
-  },
-
   NG: {
     meta: {
       title: 'About Betfluencer — Free Football Tips in Nigeria',

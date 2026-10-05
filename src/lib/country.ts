@@ -50,7 +50,7 @@ export const DEFAULT_COUNTRY: Country = {
 // phone-number prefix per market on signup/login and drives normalisePhone.
 // Uganda is the fallback (matches normalisePhone's historical default).
 export const DIAL_CODES: Record<string, string> = {
-  UG: '256', NG: '234', GH: '233', ZA: '27', KE: '254', BR: '55',
+  UG: '256', NG: '234', GH: '233', ZA: '27', KE: '254',
 }
 export function dialCode(code: string | null | undefined): string {
   return DIAL_CODES[(code ?? '').toUpperCase()] ?? DIAL_CODES.UG

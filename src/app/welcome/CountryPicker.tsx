@@ -54,7 +54,7 @@ export default function CountryPicker({ countries }: { countries: Country[] }) {
           bet<span style={{ color: 'var(--gold)' }}>fluencer</span>
         </div>
         <p style={{ fontSize: 14, color: 'var(--offwhite)', lineHeight: 1.7, maxWidth: 400, margin: '0 auto' }}>
-          The football tips community across Africa and Brazil. Browse betslips from verified
+          Africa&apos;s football tips community. Browse betslips from verified
           tipsters, check their real win record, and see every pick — free.
           Booking codes and screenshots, no payment, no account needed.
         </p>

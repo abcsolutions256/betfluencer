@@ -13,12 +13,8 @@ export async function marketAlternates(path: string): Promise<{
   const host = headers().get('host') ?? `ug.${MAIN_DOMAIN}`
   const live = (await loadCountries()).filter(c => c.active)
 
-  // hreflang language tag per market: English across the African markets,
-  // Portuguese for Brazil. Any future market defaults to 'en'.
-  const langFor = (code: string) => (code === 'BR' ? 'pt' : 'en')
-
   const languages: Record<string, string> = {}
-  for (const c of live) languages[`${langFor(c.code)}-${c.code}`] = `https://${c.subdomain}.${MAIN_DOMAIN}${path}`
+  for (const c of live) languages[`en-${c.code}`] = `https://${c.subdomain}.${MAIN_DOMAIN}${path}`
   languages['x-default'] = `https://${MAIN_DOMAIN}/welcome`
 
   return { canonical: `https://${host}${path}`, languages }
